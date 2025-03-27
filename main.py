@@ -376,66 +376,55 @@ async def ping(ctx):
     await ctx.send(embed=embed)
 
 @bot.command()
-async def help(ctx, command=None):
-    """Show all available commands or info about a specific command"""
-    if command:
-        # Show help for specific command
-        cmd = bot.get_command(command)
-        if cmd:
-            embed = discord.Embed(
-                title=f"Command: {cmd.name}",
-                description=cmd.help or "No description available",
-                color=EMBED_COLOR
-            )
-            if cmd.aliases:
-                embed.add_field(name="Aliases", value=", ".join(cmd.aliases))
-            await ctx.send(embed=embed)
-        else:
-            embed = discord.Embed(
-                title="Error",
-                description=f"Command `{command}` not found.",
-                color=EMBED_COLOR
-            )
-            await ctx.send(embed=embed)
-    else:
-        # Show all commands
-        embed = discord.Embed(
-            title="Bot Commands",
-            description="Here are all available commands:",
-            color=EMBED_COLOR
-        )
+async def help(ctx):
+    """Show all available commands"""
+    embed = discord.Embed(
+        title="Bot Commands",
+        description="Here are all available commands:",
+        color=EMBED_COLOR
+    )
 
-        # Moderation Commands
-        mod_commands = [
-            "`?ban` - Ban a user",
-            "`?kick` - Kick a user",
-            "`?timeout` - Timeout a user",
-            "`?untimeout` - Remove timeout from a user",
-            "`?unban` - Unban a user"
-        ]
-        embed.add_field(
-            name="🛡️ Moderation Commands",
-            value="\n".join(mod_commands),
-            inline=False
-        )
+    # Moderation Commands
+    mod_commands = [
+        "`?ban` - Ban a user",
+        "`?kick` - Kick a user",
+        "`?timeout` - Timeout a user",
+        "`?untimeout` - Remove timeout from a user",
+        "`?unban` - Unban a user"
+    ]
+    embed.add_field(
+        name="Moderation Commands",
+        value="\n".join(mod_commands),
+        inline=False
+    )
 
-        # Utility Commands
-        util_commands = [
-            "`?snipe` - Show last deleted message",
-            "`?prefix` - Show current prefix",
-            "`?setprefix` - Change command prefix",
-            "`?gif` - Convert image to GIF",
-            "`?ping` - Check bot latency",
-            "`?help` - Show this help message"
-        ]
-        embed.add_field(
-            name="🔧 Utility Commands",
-            value="\n".join(util_commands),
-            inline=False
-        )
+    # Utility Commands
+    util_commands = [
+        "`?snipe` - Show last deleted message",
+        "`?prefix` - Show current prefix",
+        "`?setprefix` - Change command prefix",
+        "`?gif` - Convert image to GIF",
+        "`?ping` - Check bot latency",
+        "`?help` - Show this help message",
+        "`?repo` - Get the bot's repository link"
+    ]
+    embed.add_field(
+        name="Utility Commands",
+        value="\n".join(util_commands),
+        inline=False
+    )
 
-        embed.set_footer(text="Use ?help <command> for more info about a specific command")
-        await ctx.send(embed=embed)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def repo(ctx):
+    """Get the bot's repository link"""
+    embed = discord.Embed(
+        title="Repository Link",
+        description="[Click here to view the bot's repository](https://github.com/LyrdSouth/template.py)",
+        color=EMBED_COLOR
+    )
+    await ctx.send(embed=embed)
 
 # Run the bot
 bot.run(os.getenv('DISCORD_TOKEN')) 
