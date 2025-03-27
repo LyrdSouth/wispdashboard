@@ -78,3 +78,8 @@ Feel free to fork this repository and submit pull requests. This template is des
 ## License
 
 This project is open source and available under the MIT License. Feel free to use this code in your own projects. 
+
+https://discord.gg/KWPVEZ277v
+https://discord.gg/KWPVEZ277v
+https://discord.gg/KWPVEZ277v
+https://discord.gg/KWPVEZ277v
