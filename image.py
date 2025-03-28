@@ -84,28 +84,27 @@ class ImageCog(commands.Cog):
                             background.paste(image, mask=image.split()[-1])
                             image = background
                         
-                        # Simple approach: fixed height bar with thick text
-                        bar_height = image.width // 3  # Make bar 1/3 of image width for large text
+                        # Make a white bar at the top for the caption
+                        bar_height = min(200, image.width // 3)  # Reasonable height, not too tall
                         new_height = image.height + bar_height
-                        
-                        # Create new image with white bar at top
                         new_image = Image.new('RGB', (image.width, new_height), (255, 255, 255))
                         new_image.paste(image, (0, bar_height))
                         
-                        # Create drawing object
-                        draw = ImageDraw.Draw(new_image)
+                        # Create a blank image for the text at much higher resolution (for larger text)
+                        text_img = Image.new('RGB', (image.width * 5, bar_height * 5), (255, 255, 255))
+                        draw = ImageDraw.Draw(text_img)
                         
                         # Use default font
                         font = ImageFont.load_default()
                         
-                        # Make text very large by drawing it multiple times with small offsets
-                        # This creates a "bold" effect
-                        for x_offset in range(-8, 9, 2):  # -8, -6, -4, -2, 0, 2, 4, 6, 8
-                            for y_offset in range(-8, 9, 2):
-                                # Position text in middle of bar
-                                x = image.width // 10
-                                y = bar_height // 3
-                                draw.text((x + x_offset, y + y_offset), text, font=font, fill=(0, 0, 0))
+                        # Draw text in big size
+                        draw.text((text_img.width // 10, text_img.height // 3), text.upper(), font=font, fill=(0, 0, 0))
+                        
+                        # Resize down to fit the bar (this makes the font look bigger)
+                        text_img = text_img.resize((image.width, bar_height), Image.Resampling.LANCZOS)
+                        
+                        # Paste text image onto the white bar
+                        new_image.paste(text_img, (0, 0))
                         
                         # Save and send
                         output = io.BytesIO()
