@@ -416,7 +416,10 @@ async def help(ctx):
 
     # Image Commands
     image_commands = [
-        "`?gif` - Convert image to GIF"
+        "`?gif` - Convert image to GIF",
+        "`?caption <text>` - Add text caption to an image",
+        "`?fry` - Deepfry an image",
+        "`?mirror` - Mirror an image horizontally"
     ]
     embed.add_field(
         name="Image Commands",
