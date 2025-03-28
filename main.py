@@ -42,6 +42,7 @@ prefixes = load_prefixes()
 async def on_ready():
     print(f'Bot is ready! Logged in as {bot.user.name}')
     await bot.load_extension('image')  # Load the image cog
+    await bot.load_extension('security')  # Load the security cog
     await bot.change_presence(activity=discord.Game(name="?help"))
 
 @bot.event
@@ -382,6 +383,16 @@ async def help(ctx):
     embed.add_field(
         name="Image Commands",
         value="\n".join(image_commands),
+        inline=False
+    )
+
+    # Security Commands
+    security_commands = [
+        "`?setsecuritylog <channel>` - Set channel for security alerts"
+    ]
+    embed.add_field(
+        name="Security Commands",
+        value="\n".join(security_commands),
         inline=False
     )
 
