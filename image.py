@@ -55,7 +55,7 @@ class ImageCog(commands.Cog):
 
     @commands.command()
     async def caption(self, ctx, *, text):
-        """Add text caption to an image"""
+        """Add meme-style caption to an image"""
         if not ctx.message.reference:
             await ctx.send("Please reply to an image to add a caption!")
             return
@@ -84,41 +84,44 @@ class ImageCog(commands.Cog):
                             background.paste(image, mask=image.split()[-1])
                             image = background
                         
-                        # Create drawing object
-                        draw = ImageDraw.Draw(image)
+                        # Create a new image with white bar at top
+                        bar_height = 100  # Height of the white caption bar
+                        new_height = image.height + bar_height
+                        new_image = Image.new('RGB', (image.width, new_height), (255, 255, 255))
                         
-                        # Try to load a font, fallback to default if not available
+                        # Paste the original image below the white bar
+                        new_image.paste(image, (0, bar_height))
+                        
+                        # Create drawing object
+                        draw = ImageDraw.Draw(new_image)
+                        
+                        # Try to load Impact font (meme font), fallback to Arial
                         try:
-                            font = ImageFont.truetype("arial.ttf", 60)
+                            font = ImageFont.truetype("impact.ttf", 60)
                         except:
-                            font = ImageFont.load_default()
+                            try:
+                                font = ImageFont.truetype("arial.ttf", 60)
+                            except:
+                                font = ImageFont.load_default()
                         
                         # Get text size
                         text_bbox = draw.textbbox((0, 0), text, font=font)
                         text_width = text_bbox[2] - text_bbox[0]
                         text_height = text_bbox[3] - text_bbox[1]
                         
-                        # Calculate position (centered at bottom with padding)
+                        # Calculate position (centered in white bar)
                         x = (image.width - text_width) // 2
-                        y = image.height - text_height - 20
+                        y = (bar_height - text_height) // 2
                         
-                        # Draw text with outline
-                        outline_color = (0, 0, 0)
-                        text_color = (255, 255, 255)
-                        
-                        # Draw outline
-                        for offset in [(1,1), (-1,-1), (1,-1), (-1,1)]:
-                            draw.text((x + offset[0], y + offset[1]), text, font=font, fill=outline_color)
-                        
-                        # Draw main text
-                        draw.text((x, y), text, font=font, fill=text_color)
+                        # Draw text in black
+                        draw.text((x, y), text, font=font, fill=(0, 0, 0))
                         
                         # Save and send
                         output = io.BytesIO()
-                        image.save(output, format='PNG')
+                        new_image.save(output, format='PNG')
                         output.seek(0)
                         
-                        await ctx.send(file=discord.File(output, filename='captioned.png'))
+                        await ctx.send(file=discord.File(output, filename='meme.png'))
                     else:
                         await ctx.send("Failed to download the image!")
         except Exception as e:
