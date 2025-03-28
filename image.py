@@ -85,7 +85,7 @@ class ImageCog(commands.Cog):
                             image = background
                         
                         # Create a new image with white bar at top
-                        bar_height = 100  # Height of the white caption bar
+                        bar_height = 150  # Increased height for larger text
                         new_height = image.height + bar_height
                         new_image = Image.new('RGB', (image.width, new_height), (255, 255, 255))
                         
@@ -95,12 +95,18 @@ class ImageCog(commands.Cog):
                         # Create drawing object
                         draw = ImageDraw.Draw(new_image)
                         
-                        # Try to load Impact font (meme font), fallback to Arial
+                        # Try to load Impact font with larger size
                         try:
-                            font = ImageFont.truetype("impact.ttf", 60)
+                            font = ImageFont.truetype("impact.ttf", 100)  # Increased font size
                         except:
                             try:
-                                font = ImageFont.truetype("arial.ttf", 60)
+                                # Try to download Impact font if not available
+                                async with session.get("https://github.com/google/fonts/raw/main/ofl/impact/Impact.ttf") as font_resp:
+                                    if font_resp.status == 200:
+                                        font_data = await font_resp.read()
+                                        font = ImageFont.truetype(io.BytesIO(font_data), 100)
+                                    else:
+                                        font = ImageFont.truetype("arial.ttf", 100)
                             except:
                                 font = ImageFont.load_default()
                         
