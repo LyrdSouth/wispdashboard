@@ -21,7 +21,7 @@ class SecurityCog(commands.Cog):
         with open('security_logs.json', 'w') as f:
             json.dump(self.log_channels, f)
 
-    @commands.command()
+    @commands.hybrid_command(name="setsecuritylog", description="Set the channel for security alerts")
     @commands.has_permissions(administrator=True)
     async def setsecuritylog(self, ctx, channel: discord.TextChannel):
         """Set the channel for security alerts"""
@@ -127,16 +127,6 @@ class SecurityCog(commands.Cog):
             return f"{hours} hours, {minutes} minutes"
         else:
             return f"{minutes} minutes"
-
-    #### SLASH COMMANDS ####
-
-    @commands.hybrid_command(name="setsecuritylog", description="Set the channel for security alerts")
-    @commands.has_permissions(administrator=True)
-    async def slash_setsecuritylog(self, ctx, channel: discord.TextChannel):
-        """Set the channel for security alerts"""
-        self.log_channels[str(ctx.guild.id)] = channel.id
-        self.save_log_channels()
-        await ctx.send(f"Security log channel set to {channel.mention}")
 
 async def setup(bot):
     await bot.add_cog(SecurityCog(bot)) 
