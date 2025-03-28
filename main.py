@@ -41,6 +41,7 @@ prefixes = load_prefixes()
 @bot.event
 async def on_ready():
     print(f'Bot is ready! Logged in as {bot.user.name}')
+    await bot.load_extension('image')  # Load the image cog
     await bot.change_presence(activity=discord.Game(name="?help"))
 
 @bot.event
@@ -403,7 +404,6 @@ async def help(ctx):
         "`?snipe` - Show last deleted message",
         "`?prefix` - Show current prefix",
         "`?setprefix` - Change command prefix",
-        "`?gif` - Convert image to GIF",
         "`?ping` - Check bot latency",
         "`?help` - Show this help message",
         "`?repo` - Get the bot's repository link"
@@ -411,6 +411,16 @@ async def help(ctx):
     embed.add_field(
         name="Utility Commands",
         value="\n".join(util_commands),
+        inline=False
+    )
+
+    # Image Commands
+    image_commands = [
+        "`?gif` - Convert image to GIF"
+    ]
+    embed.add_field(
+        name="Image Commands",
+        value="\n".join(image_commands),
         inline=False
     )
 
