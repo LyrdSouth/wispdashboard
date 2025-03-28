@@ -173,22 +173,22 @@ class ImageCog(commands.Cog):
 
     #### SLASH COMMANDS ####
 
-    @commands.slash_command(name="gif", description="Convert an image to GIF format")
-    async def slash_gif(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="gif", description="Convert an image to GIF format")
+    async def slash_gif(self, ctx):
         """Convert an image to GIF format"""
-        if not interaction.message.reference:
-            await interaction.response.send_message("Please reply to an image to convert it to a GIF!", ephemeral=True)
+        if not ctx.message.reference:
+            await ctx.send("Please reply to an image to convert it to a GIF!")
             return
         
         try:
-            referenced_message = await interaction.channel.fetch_message(interaction.message.reference.message_id)
+            referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not referenced_message.attachments:
-                await interaction.response.send_message("The referenced message doesn't contain any images!", ephemeral=True)
+                await ctx.send("The referenced message doesn't contain any images!")
                 return
             
             attachment = referenced_message.attachments[0]
             if not attachment.content_type.startswith('image'):
-                await interaction.response.send_message("The referenced message doesn't contain a valid image!", ephemeral=True)
+                await ctx.send("The referenced message doesn't contain a valid image!")
                 return
             
             # Download the image
@@ -210,33 +210,33 @@ class ImageCog(commands.Cog):
                         output.seek(0)
                         
                         # Send the GIF
-                        await interaction.response.send_message(file=discord.File(output, filename='converted.gif'))
+                        await ctx.send(file=discord.File(output, filename='converted.gif'))
                     else:
-                        await interaction.response.send_message("Failed to download the image!", ephemeral=True)
+                        await ctx.send("Failed to download the image!")
         except Exception as e:
-            await interaction.response.send_message(f"An error occurred: {str(e)}", ephemeral=True)
+            await ctx.send(f"An error occurred: {str(e)}")
 
-    @commands.slash_command(name="caption", description="Add meme-style caption to an image")
-    async def slash_caption(self, interaction: discord.Interaction, text: str):
+    @commands.hybrid_command(name="caption", description="Add meme-style caption to an image")
+    async def slash_caption(self, ctx, text: str):
         """Add meme-style caption to an image"""
-        await interaction.response.send_message("This command is currently broken, sorry :((")
+        await ctx.send("This command is currently broken, sorry :((")
 
-    @commands.slash_command(name="fry", description="Deepfry an image")
-    async def slash_fry(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="fry", description="Deepfry an image")
+    async def slash_fry(self, ctx):
         """Deepfry an image"""
-        if not interaction.message.reference:
-            await interaction.response.send_message("Please reply to an image to deepfry it!", ephemeral=True)
+        if not ctx.message.reference:
+            await ctx.send("Please reply to an image to deepfry it!")
             return
         
         try:
-            referenced_message = await interaction.channel.fetch_message(interaction.message.reference.message_id)
+            referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not referenced_message.attachments:
-                await interaction.response.send_message("The referenced message doesn't contain any images!", ephemeral=True)
+                await ctx.send("The referenced message doesn't contain any images!")
                 return
             
             attachment = referenced_message.attachments[0]
             if not attachment.content_type.startswith('image'):
-                await interaction.response.send_message("The referenced message doesn't contain a valid image!", ephemeral=True)
+                await ctx.send("The referenced message doesn't contain a valid image!")
                 return
             
             # Download the image
@@ -283,28 +283,28 @@ class ImageCog(commands.Cog):
                         image.save(output, format='PNG')
                         output.seek(0)
                         
-                        await interaction.response.send_message(file=discord.File(output, filename='deepfried.png'))
+                        await ctx.send(file=discord.File(output, filename='deepfried.png'))
                     else:
-                        await interaction.response.send_message("Failed to download the image!", ephemeral=True)
+                        await ctx.send("Failed to download the image!")
         except Exception as e:
-            await interaction.response.send_message(f"An error occurred: {str(e)}", ephemeral=True)
+            await ctx.send(f"An error occurred: {str(e)}")
 
-    @commands.slash_command(name="mirror", description="Mirror an image horizontally")
-    async def slash_mirror(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="mirror", description="Mirror an image horizontally")
+    async def slash_mirror(self, ctx):
         """Mirror an image horizontally"""
-        if not interaction.message.reference:
-            await interaction.response.send_message("Please reply to an image to mirror it!", ephemeral=True)
+        if not ctx.message.reference:
+            await ctx.send("Please reply to an image to mirror it!")
             return
         
         try:
-            referenced_message = await interaction.channel.fetch_message(interaction.message.reference.message_id)
+            referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not referenced_message.attachments:
-                await interaction.response.send_message("The referenced message doesn't contain any images!", ephemeral=True)
+                await ctx.send("The referenced message doesn't contain any images!")
                 return
             
             attachment = referenced_message.attachments[0]
             if not attachment.content_type.startswith('image'):
-                await interaction.response.send_message("The referenced message doesn't contain a valid image!", ephemeral=True)
+                await ctx.send("The referenced message doesn't contain a valid image!")
                 return
             
             # Download the image
@@ -328,11 +328,11 @@ class ImageCog(commands.Cog):
                         mirrored_image.save(output, format='PNG')
                         output.seek(0)
                         
-                        await interaction.response.send_message(file=discord.File(output, filename='mirrored.png'))
+                        await ctx.send(file=discord.File(output, filename='mirrored.png'))
                     else:
-                        await interaction.response.send_message("Failed to download the image!", ephemeral=True)
+                        await ctx.send("Failed to download the image!")
         except Exception as e:
-            await interaction.response.send_message(f"An error occurred: {str(e)}", ephemeral=True)
+            await ctx.send(f"An error occurred: {str(e)}")
 
 async def setup(bot):
     await bot.add_cog(ImageCog(bot)) 
