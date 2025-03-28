@@ -52,7 +52,7 @@ class SecurityCog(commands.Cog):
             await channel.send(embed=embed)
 
         # Check for new accounts (less than 7 days old)
-        if (datetime.utcnow() - member.created_at).days < 7:
+        if (datetime.now(member.created_at.tzinfo) - member.created_at).days < 7:
             embed = discord.Embed(
                 title="⚠️ New Account Detected",
                 description=f"User {member.mention} joined with a new account",
@@ -116,7 +116,7 @@ class SecurityCog(commands.Cog):
 
     def get_account_age(self, created_at):
         """Get a human-readable account age"""
-        age = datetime.utcnow() - created_at
+        age = datetime.now(created_at.tzinfo) - created_at
         days = age.days
         hours = age.seconds // 3600
         minutes = (age.seconds % 3600) // 60
