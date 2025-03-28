@@ -128,5 +128,15 @@ class SecurityCog(commands.Cog):
         else:
             return f"{minutes} minutes"
 
+    #### SLASH COMMANDS ####
+
+    @commands.slash_command(name="setsecuritylog", description="Set the channel for security alerts")
+    @commands.has_permissions(administrator=True)
+    async def slash_setsecuritylog(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Set the channel for security alerts"""
+        self.log_channels[str(interaction.guild.id)] = channel.id
+        self.save_log_channels()
+        await interaction.response.send_message(f"Security log channel set to {channel.mention}")
+
 async def setup(bot):
     await bot.add_cog(SecurityCog(bot)) 
