@@ -84,43 +84,28 @@ class ImageCog(commands.Cog):
                             background.paste(image, mask=image.split()[-1])
                             image = background
                         
-                        # Create a new image with white bar at top
-                        bar_height = 150  # Increased height for larger text
+                        # Simple approach: fixed height bar with thick text
+                        bar_height = image.width // 3  # Make bar 1/3 of image width for large text
                         new_height = image.height + bar_height
-                        new_image = Image.new('RGB', (image.width, new_height), (255, 255, 255))
                         
-                        # Paste the original image below the white bar
+                        # Create new image with white bar at top
+                        new_image = Image.new('RGB', (image.width, new_height), (255, 255, 255))
                         new_image.paste(image, (0, bar_height))
                         
                         # Create drawing object
                         draw = ImageDraw.Draw(new_image)
                         
-                        # Try to load Impact font with larger size
-                        try:
-                            font = ImageFont.truetype("impact.ttf", 100)  # Increased font size
-                        except:
-                            try:
-                                # Try to download Impact font if not available
-                                async with session.get("https://github.com/google/fonts/raw/main/ofl/impact/Impact.ttf") as font_resp:
-                                    if font_resp.status == 200:
-                                        font_data = await font_resp.read()
-                                        font = ImageFont.truetype(io.BytesIO(font_data), 100)
-                                    else:
-                                        font = ImageFont.truetype("arial.ttf", 100)
-                            except:
-                                font = ImageFont.load_default()
+                        # Use default font
+                        font = ImageFont.load_default()
                         
-                        # Get text size
-                        text_bbox = draw.textbbox((0, 0), text, font=font)
-                        text_width = text_bbox[2] - text_bbox[0]
-                        text_height = text_bbox[3] - text_bbox[1]
-                        
-                        # Calculate position (centered in white bar)
-                        x = (image.width - text_width) // 2
-                        y = (bar_height - text_height) // 2
-                        
-                        # Draw text in black
-                        draw.text((x, y), text, font=font, fill=(0, 0, 0))
+                        # Make text very large by drawing it multiple times with small offsets
+                        # This creates a "bold" effect
+                        for x_offset in range(-8, 9, 2):  # -8, -6, -4, -2, 0, 2, 4, 6, 8
+                            for y_offset in range(-8, 9, 2):
+                                # Position text in middle of bar
+                                x = image.width // 10
+                                y = bar_height // 3
+                                draw.text((x + x_offset, y + y_offset), text, font=font, fill=(0, 0, 0))
                         
                         # Save and send
                         output = io.BytesIO()
