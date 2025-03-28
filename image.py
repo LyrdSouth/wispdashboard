@@ -10,7 +10,7 @@ class ImageCog(commands.Cog):
         self.bot = bot
         self.EMBED_COLOR = discord.Color.from_rgb(187, 144, 252)  # Soft purple color
 
-    @commands.hybrid_command(name="gif", description="Convert an image to GIF format")
+    @commands.command()
     async def gif(self, ctx):
         """Convert an image to GIF format"""
         if not ctx.message.reference:
@@ -53,12 +53,12 @@ class ImageCog(commands.Cog):
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
-    @commands.hybrid_command(name="caption", description="Add meme-style caption to an image")
-    async def caption(self, ctx, text: str):
+    @commands.command()
+    async def caption(self, ctx, *, text):
         """Add meme-style caption to an image"""
         await ctx.send("This command is currently broken, sorry :((")
 
-    @commands.hybrid_command(name="fry", description="Deepfry an image")
+    @commands.command()
     async def fry(self, ctx):
         """Deepfry an image"""
         if not ctx.message.reference:
@@ -126,7 +126,7 @@ class ImageCog(commands.Cog):
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
-    @commands.hybrid_command(name="mirror", description="Mirror an image horizontally")
+    @commands.command()
     async def mirror(self, ctx):
         """Mirror an image horizontally"""
         if not ctx.message.reference:
