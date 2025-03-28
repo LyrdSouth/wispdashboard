@@ -56,66 +56,7 @@ class ImageCog(commands.Cog):
     @commands.command()
     async def caption(self, ctx, *, text):
         """Add meme-style caption to an image"""
-        if not ctx.message.reference:
-            await ctx.send("Please reply to an image to add a caption!")
-            return
-        
-        try:
-            referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            if not referenced_message.attachments:
-                await ctx.send("The referenced message doesn't contain any images!")
-                return
-            
-            attachment = referenced_message.attachments[0]
-            if not attachment.content_type.startswith('image'):
-                await ctx.send("The referenced message doesn't contain a valid image!")
-                return
-            
-            # Download the image
-            async with aiohttp.ClientSession() as session:
-                async with session.get(attachment.url) as resp:
-                    if resp.status == 200:
-                        image_data = await resp.read()
-                        image = Image.open(io.BytesIO(image_data))
-                        
-                        # Convert to RGB if necessary
-                        if image.mode in ('RGBA', 'LA'):
-                            background = Image.new('RGB', image.size, (255, 255, 255))
-                            background.paste(image, mask=image.split()[-1])
-                            image = background
-                        
-                        # Make a white bar at the top for the caption
-                        bar_height = min(200, image.width // 3)  # Reasonable height, not too tall
-                        new_height = image.height + bar_height
-                        new_image = Image.new('RGB', (image.width, new_height), (255, 255, 255))
-                        new_image.paste(image, (0, bar_height))
-                        
-                        # Create a blank image for the text at much higher resolution (for larger text)
-                        text_img = Image.new('RGB', (image.width * 5, bar_height * 5), (255, 255, 255))
-                        draw = ImageDraw.Draw(text_img)
-                        
-                        # Use default font
-                        font = ImageFont.load_default()
-                        
-                        # Draw text in big size
-                        draw.text((text_img.width // 10, text_img.height // 3), text.upper(), font=font, fill=(0, 0, 0))
-                        
-                        # Resize down to fit the bar (this makes the font look bigger)
-                        text_img = text_img.resize((image.width, bar_height), Image.Resampling.LANCZOS)
-                        
-                        # Paste text image onto the white bar
-                        new_image.paste(text_img, (0, 0))
-                        
-                        # Save and send
-                        output = io.BytesIO()
-                        new_image.save(output, format='PNG')
-                        output.seek(0)
-                        
-                        await ctx.send(file=discord.File(output, filename='meme.png'))
-                    else:
-                        await ctx.send("Failed to download the image!")
-        except Exception as e:
-            await ctx.send(f"An error occurred: {str(e)}")
+        await ctx.send("This command is currently broken, sorry :((")
 
     @commands.command()
     async def fry(self, ctx):
