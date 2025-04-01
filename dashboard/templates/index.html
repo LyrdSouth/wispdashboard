@@ -1,33 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}WISP Bot - Discord Moderation Made Simple{% endblock %}
+{% block title %}WISP - Modern Discord Bot{% endblock %}
 
 {% block content %}
 <section class="hero">
-    <h1>Discord Moderation Made Simple</h1>
-    <p>WISP Bot is your all-in-one solution for Discord server management. Powerful moderation tools, image manipulation, and customizable settings - all in one modern interface.</p>
+    <h1>The Next Generation<br>Discord Bot</h1>
+    <p>Experience seamless server management with WISP. Advanced moderation, powerful image manipulation, and customizable settings - all wrapped in a beautiful, modern interface.</p>
     <div class="hero-buttons">
         <a href="{{ url_for('login') }}" class="button button-primary">
             <i data-feather="log-in"></i>
-            Login with Discord
+            Get Started
         </a>
         <a href="https://discord.gg/your-invite" class="button button-secondary" target="_blank">
             <i data-feather="help-circle"></i>
-            Join Support Server
+            Join Community
         </a>
     </div>
 </section>
 
 <section class="stats">
     <div class="stat-card">
+        <i data-feather="server" style="width: 24px; height: 24px; margin-bottom: 1rem; color: var(--primary);"></i>
         <h3 id="serverCount">0</h3>
         <p>Active Servers</p>
     </div>
     <div class="stat-card">
+        <i data-feather="users" style="width: 24px; height: 24px; margin-bottom: 1rem; color: var(--primary);"></i>
         <h3 id="userCount">0</h3>
         <p>Total Users</p>
     </div>
     <div class="stat-card">
+        <i data-feather="terminal" style="width: 24px; height: 24px; margin-bottom: 1rem; color: var(--primary);"></i>
         <h3 id="commandCount">0</h3>
         <p>Commands Used</p>
     </div>
@@ -35,33 +38,64 @@
 
 <section class="features">
     <div class="feature-card">
-        <i data-feather="shield" style="color: var(--primary); width: 24px; height: 24px; margin-bottom: 1rem;"></i>
+        <i data-feather="shield"></i>
         <h3>Advanced Moderation</h3>
-        <p>Powerful tools for managing your server, including ban, kick, timeout, and warning systems.</p>
+        <p>Keep your server safe with powerful moderation tools. Ban, kick, timeout, and warning systems with detailed logging and customizable settings.</p>
     </div>
     <div class="feature-card">
-        <i data-feather="image" style="color: var(--primary); width: 24px; height: 24px; margin-bottom: 1rem;"></i>
+        <i data-feather="image"></i>
         <h3>Image Commands</h3>
-        <p>Create GIFs, add captions, mirror images, and more with our suite of image manipulation tools.</p>
+        <p>Transform your images with our suite of manipulation tools. Create GIFs, add captions, apply effects, and more with simple commands.</p>
     </div>
     <div class="feature-card">
-        <i data-feather="sliders" style="color: var(--primary); width: 24px; height: 24px; margin-bottom: 1rem;"></i>
+        <i data-feather="sliders"></i>
         <h3>Custom Settings</h3>
-        <p>Customize prefix, enabled features, and logging channels for each server.</p>
+        <p>Tailor WISP to your server's needs. Customize command prefix, enable/disable features, and set up logging channels through an intuitive dashboard.</p>
+    </div>
+    <div class="feature-card">
+        <i data-feather="zap"></i>
+        <h3>Lightning Fast</h3>
+        <p>Experience instant responses with our optimized infrastructure. Slash commands and traditional prefix commands supported for maximum flexibility.</p>
     </div>
 </section>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Fetch bot statistics
+    // Animate stats when they come into view
+    const stats = document.querySelectorAll('.stat-card h3');
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                animateValue(entry.target, 0, parseInt(entry.target.textContent), 2000);
+            }
+        });
+    });
+    
+    stats.forEach(stat => observer.observe(stat));
+
+    // Fetch and animate stats
     fetch('/api/stats')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('serverCount').textContent = data.servers.toLocaleString();
-            document.getElementById('userCount').textContent = data.users.toLocaleString();
-            document.getElementById('commandCount').textContent = data.commands.toLocaleString();
+            document.getElementById('serverCount').textContent = data.servers;
+            document.getElementById('userCount').textContent = data.users;
+            document.getElementById('commandCount').textContent = data.commands;
         })
         .catch(error => console.error('Error fetching stats:', error));
+
+    // Number animation function
+    function animateValue(obj, start, end, duration) {
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            obj.textContent = Math.floor(progress * (end - start) + start).toLocaleString();
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
 });
 </script>
 {% endblock %} 

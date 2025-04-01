@@ -7,12 +7,13 @@
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <script src="https://unpkg.com/feather-icons"></script>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
 </head>
 <body>
     <aside class="sidebar">
         <div class="sidebar-logo">
             <img src="{{ url_for('static', filename='img/logo.png') }}" alt="WISP Bot Logo">
-            <h1>WISP Bot</h1>
+            <h1>WISP</h1>
         </div>
         <nav class="nav-links">
             <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
@@ -24,6 +25,14 @@
                 <i data-feather="grid"></i>
                 Dashboard
             </a>
+            <a href="#servers" class="nav-link">
+                <i data-feather="server"></i>
+                Servers
+            </a>
+            <a href="#commands" class="nav-link">
+                <i data-feather="terminal"></i>
+                Commands
+            </a>
             <a href="#settings" class="nav-link">
                 <i data-feather="settings"></i>
                 Settings
@@ -32,9 +41,24 @@
                 <i data-feather="bar-chart-2"></i>
                 Analytics
             </a>
-            <a href="{{ url_for('logout') }}" class="nav-link">
+            <div style="flex-grow: 1;"></div>
+            <div class="user-section">
+                {% if session.user.avatar %}
+                <img src="https://cdn.discordapp.com/avatars/{{ session.user.id }}/{{ session.user.avatar }}.png" 
+                     alt="User Avatar" 
+                     style="width: 32px; height: 32px; border-radius: 50%; margin-right: 12px;">
+                {% endif %}
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">{{ session.user.username }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="nav-link" style="margin-top: 0.5rem;">
                 <i data-feather="log-out"></i>
                 Logout
+            </a>
+            {% else %}
+            <div style="flex-grow: 1;"></div>
+            <a href="{{ url_for('login') }}" class="nav-link">
+                <i data-feather="log-in"></i>
+                Login with Discord
             </a>
             {% endif %}
         </nav>
