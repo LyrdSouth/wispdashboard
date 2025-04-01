@@ -3,64 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}WISP Bot Dashboard{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>{% block title %}WISP Bot{% endblock %}</title>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <script src="https://unpkg.com/feather-icons"></script>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <nav class="sidebar">
-            <div class="sidebar-header">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="WISP Logo" class="logo">
-                <h1>WISP Bot</h1>
-            </div>
-            
-            <div class="sidebar-section">
-                <h2>NAVIGATION</h2>
-                <div class="nav-links">
-                    <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                        <i class="fas fa-home"></i>
-                        <span>Dashboard</span>
-                    </a>
-                    <a href="#" class="nav-link">
-                        <i class="fas fa-cog"></i>
-                        <span>Settings</span>
-                    </a>
-                    <a href="#" class="nav-link">
-                        <i class="fas fa-chart-bar"></i>
-                        <span>Analytics</span>
-                    </a>
-                </div>
-            </div>
-            
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="WISP Bot Logo">
+            <h1>WISP Bot</h1>
+        </div>
+        <nav class="nav-links">
+            <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                <i data-feather="home"></i>
+                Home
+            </a>
             {% if session.user %}
-            <div class="sidebar-section">
-                <h2>ACCOUNT</h2>
-                <div class="nav-links">
-                    <div class="user-info">
-                        <img src="https://cdn.discordapp.com/avatars/{{ session.user.id }}/{{ session.user.avatar }}.png" alt="User Avatar" class="user-avatar">
-                        <div class="user-details">
-                            <span class="username">{{ session.user.username }}</span>
-                            <span class="user-id">#{{ session.user.discriminator }}</span>
-                        </div>
-                    </div>
-                    <a href="{{ url_for('logout') }}" class="nav-link">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>Log Out</span>
-                    </a>
-                </div>
-            </div>
+            <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                <i data-feather="grid"></i>
+                Dashboard
+            </a>
+            <a href="#settings" class="nav-link">
+                <i data-feather="settings"></i>
+                Settings
+            </a>
+            <a href="#analytics" class="nav-link">
+                <i data-feather="bar-chart-2"></i>
+                Analytics
+            </a>
+            <a href="{{ url_for('logout') }}" class="nav-link">
+                <i data-feather="log-out"></i>
+                Logout
+            </a>
             {% endif %}
         </nav>
-        
-        <!-- Main Content -->
-        <main class="main-content">
-            {% block content %}{% endblock %}
-        </main>
-    </div>
-    
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    </aside>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        feather.replace();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html> 

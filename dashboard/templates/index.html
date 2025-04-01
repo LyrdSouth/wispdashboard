@@ -1,96 +1,67 @@
 {% extends "base.html" %}
 
-{% block title %}Welcome - WISP Bot Dashboard{% endblock %}
+{% block title %}WISP Bot - Discord Moderation Made Simple{% endblock %}
 
 {% block content %}
-<div class="hero-section">
-    <div class="hero-content">
-        <h1>Welcome to WISP Bot</h1>
-        <p>A powerful Discord bot for moderation, utility, and fun!</p>
-        <div class="hero-buttons">
-            <a href="{{ url_for('login') }}" class="btn btn-primary">
-                <i class="fab fa-discord"></i>
-                Login with Discord
-            </a>
-            <a href="https://discord.gg/KWPVEZ277v" class="btn btn-secondary" target="_blank">
-                <i class="fas fa-users"></i>
-                Join Support Server
-            </a>
-        </div>
+<section class="hero">
+    <h1>Discord Moderation Made Simple</h1>
+    <p>WISP Bot is your all-in-one solution for Discord server management. Powerful moderation tools, image manipulation, and customizable settings - all in one modern interface.</p>
+    <div class="hero-buttons">
+        <a href="{{ url_for('login') }}" class="button button-primary">
+            <i data-feather="log-in"></i>
+            Login with Discord
+        </a>
+        <a href="https://discord.gg/your-invite" class="button button-secondary" target="_blank">
+            <i data-feather="help-circle"></i>
+            Join Support Server
+        </a>
     </div>
-</div>
+</section>
 
-<div class="features-section">
-    <h2>Features</h2>
-    <div class="features-grid">
-        <div class="feature-card">
-            <i class="fas fa-shield-alt"></i>
-            <h3>Moderation</h3>
-            <p>Powerful moderation tools including ban, kick, timeout, and more.</p>
-        </div>
-        <div class="feature-card">
-            <i class="fas fa-image"></i>
-            <h3>Image Commands</h3>
-            <p>Fun image manipulation commands like deepfry, caption, and mirror.</p>
-        </div>
-        <div class="feature-card">
-            <i class="fas fa-cog"></i>
-            <h3>Customization</h3>
-            <p>Custom prefixes, security logs, and more per server settings.</p>
-        </div>
-        <div class="feature-card">
-            <i class="fas fa-bolt"></i>
-            <h3>Slash Commands</h3>
-            <p>Modern slash command support for better user experience.</p>
-        </div>
+<section class="stats">
+    <div class="stat-card">
+        <h3 id="serverCount">0</h3>
+        <p>Active Servers</p>
     </div>
-</div>
-
-<div class="stats-section">
-    <h2>Bot Statistics</h2>
-    <div class="stats-grid">
-        <div class="stat-card">
-            <i class="fas fa-server"></i>
-            <div class="stat-info">
-                <span class="stat-value" id="server-count">Loading...</span>
-                <span class="stat-label">Servers</span>
-            </div>
-        </div>
-        <div class="stat-card">
-            <i class="fas fa-users"></i>
-            <div class="stat-info">
-                <span class="stat-value" id="user-count">Loading...</span>
-                <span class="stat-label">Users</span>
-            </div>
-        </div>
-        <div class="stat-card">
-            <i class="fas fa-terminal"></i>
-            <div class="stat-info">
-                <span class="stat-value" id="command-count">Loading...</span>
-                <span class="stat-label">Commands</span>
-            </div>
-        </div>
+    <div class="stat-card">
+        <h3 id="userCount">0</h3>
+        <p>Total Users</p>
     </div>
-</div>
-{% endblock %}
+    <div class="stat-card">
+        <h3 id="commandCount">0</h3>
+        <p>Commands Used</p>
+    </div>
+</section>
 
-{% block scripts %}
+<section class="features">
+    <div class="feature-card">
+        <i data-feather="shield" style="color: var(--primary); width: 24px; height: 24px; margin-bottom: 1rem;"></i>
+        <h3>Advanced Moderation</h3>
+        <p>Powerful tools for managing your server, including ban, kick, timeout, and warning systems.</p>
+    </div>
+    <div class="feature-card">
+        <i data-feather="image" style="color: var(--primary); width: 24px; height: 24px; margin-bottom: 1rem;"></i>
+        <h3>Image Commands</h3>
+        <p>Create GIFs, add captions, mirror images, and more with our suite of image manipulation tools.</p>
+    </div>
+    <div class="feature-card">
+        <i data-feather="sliders" style="color: var(--primary); width: 24px; height: 24px; margin-bottom: 1rem;"></i>
+        <h3>Custom Settings</h3>
+        <p>Customize prefix, enabled features, and logging channels for each server.</p>
+    </div>
+</section>
+
 <script>
+document.addEventListener('DOMContentLoaded', function() {
     // Fetch bot statistics
-    async function fetchStats() {
-        try {
-            const response = await fetch('/api/stats');
-            const data = await response.json();
-            
-            document.getElementById('server-count').textContent = data.servers;
-            document.getElementById('user-count').textContent = data.users;
-            document.getElementById('command-count').textContent = data.commands;
-        } catch (error) {
-            console.error('Error fetching stats:', error);
-        }
-    }
-    
-    // Fetch stats when page loads
-    document.addEventListener('DOMContentLoaded', fetchStats);
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('serverCount').textContent = data.servers.toLocaleString();
+            document.getElementById('userCount').textContent = data.users.toLocaleString();
+            document.getElementById('commandCount').textContent = data.commands.toLocaleString();
+        })
+        .catch(error => console.error('Error fetching stats:', error));
+});
 </script>
 {% endblock %} 
