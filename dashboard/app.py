@@ -15,7 +15,6 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY')
 # Configure Flask for proxy
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config['PREFERRED_URL_SCHEME'] = 'https'
-app.config['SERVER_NAME'] = 'wispbot.site'
 
 # Discord OAuth2 settings
 DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
