@@ -3,7 +3,7 @@ services:
     name: wispbot-dashboard
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: FLASK_SECRET_KEY
         generateValue: true
@@ -12,4 +12,6 @@ services:
       - key: DISCORD_CLIENT_SECRET
         sync: false
       - key: DISCORD_REDIRECT_URI
-        value: https://wispbot.site/callback 
+        value: https://wispbot.site/callback
+      - key: PORT
+        value: 10000 
