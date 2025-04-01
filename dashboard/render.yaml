@@ -15,7 +15,7 @@ services:
       - key: DISCORD_CLIENT_SECRET
         sync: false
       - key: DISCORD_REDIRECT_URI
-        value: https://wispbot.site/callback
+        value: https://www.wispbot.site/callback
       - key: PORT
         value: 10000
       - key: PYTHON_VERSION

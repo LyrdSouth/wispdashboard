@@ -19,7 +19,7 @@ app.config['PREFERRED_URL_SCHEME'] = 'https'
 # Discord OAuth2 settings
 DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
 DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
-DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', 'https://wispbot.site/callback')
+DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', 'https://www.wispbot.site/callback')
 DISCORD_API_ENDPOINT = 'https://discord.com/api/v10'
 
 def login_required(f):
