@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - WISP Bot{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>Dashboard</h1>
+    <div class="server-selector">
+        <select id="server-select" class="server-select">
+            <option value="">Select a server</option>
+        </select>
+    </div>
+</div>
+
+<div class="dashboard-content">
+    <!-- Quick Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <i class="fas fa-users"></i>
+            <div class="stat-info">
+                <span class="stat-value" id="member-count">-</span>
+                <span class="stat-label">Members</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-terminal"></i>
+            <div class="stat-info">
+                <span class="stat-value" id="command-count">-</span>
+                <span class="stat-label">Commands Used</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-shield-alt"></i>
+            <div class="stat-info">
+                <span class="stat-value" id="mod-actions">-</span>
+                <span class="stat-label">Mod Actions</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Settings -->
+    <div class="settings-section">
+        <h2>Server Settings</h2>
+        <div class="settings-grid">
+            <!-- Command Prefix -->
+            <div class="setting-card">
+                <h3>Command Prefix</h3>
+                <form id="prefix-form" class="setting-form">
+                    <div class="form-group">
+                        <input type="text" id="prefix-input" placeholder="Enter prefix (max 3 chars)">
+                        <button type="submit" class="btn btn-primary">Update</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Enabled Cogs -->
+            <div class="setting-card">
+                <h3>Enabled Features</h3>
+                <form id="cogs-form" class="setting-form">
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="cog" value="moderation" checked>
+                            Moderation
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="cog" value="utility" checked>
+                            Utility
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="cog" value="image" checked>
+                            Image Commands
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Update</button>
+                </form>
+            </div>
+
+            <!-- Security Log Channel -->
+            <div class="setting-card">
+                <h3>Security Log Channel</h3>
+                <form id="log-channel-form" class="setting-form">
+                    <div class="form-group">
+                        <select id="channel-select">
+                            <option value="">Select a channel</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="activity-section">
+        <h2>Recent Activity</h2>
+        <div class="activity-list" id="activity-list">
+            <div class="loading">Loading activity...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Load user's servers
+    async function loadServers() {
+        try {
+            const response = await fetch('/api/guilds');
+            const guilds = await response.json();
+            
+            const select = document.getElementById('server-select');
+            select.innerHTML = '<option value="">Select a server</option>';
+            
+            guilds.forEach(guild => {
+                const option = document.createElement('option');
+                option.value = guild.id;
+                option.textContent = guild.name;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading servers:', error);
+        }
+    }
+
+    // Load server settings
+    async function loadServerSettings(guildId) {
+        try {
+            const response = await fetch(`/api/guild/${guildId}`);
+            const settings = await response.json();
+            
+            // Update prefix
+            document.getElementById('prefix-input').value = settings.prefix || '?';
+            
+            // Update enabled cogs
+            settings.cogs.forEach(cog => {
+                const checkbox = document.querySelector(`input[name="cog"][value="${cog}"]`);
+                if (checkbox) checkbox.checked = true;
+            });
+            
+            // Update log channel
+            const channelSelect = document.getElementById('channel-select');
+            channelSelect.value = settings.log_channel || '';
+            
+            // Load channels for log channel select
+            loadChannels(guildId);
+            
+            // Update stats
+            updateStats(settings);
+        } catch (error) {
+            console.error('Error loading server settings:', error);
+        }
+    }
+
+    // Load server channels
+    async function loadChannels(guildId) {
+        try {
+            const response = await fetch(`/api/guild/${guildId}/channels`);
+            const channels = await response.json();
+            
+            const select = document.getElementById('channel-select');
+            select.innerHTML = '<option value="">Select a channel</option>';
+            
+            channels.forEach(channel => {
+                if (channel.type === 0) { // Text channels only
+                    const option = document.createElement('option');
+                    option.value = channel.id;
+                    option.textContent = channel.name;
+                    select.appendChild(option);
+                }
+            });
+        } catch (error) {
+            console.error('Error loading channels:', error);
+        }
+    }
+
+    // Update server stats
+    function updateStats(settings) {
+        document.getElementById('member-count').textContent = settings.member_count || '-';
+        document.getElementById('command-count').textContent = settings.command_count || '-';
+        document.getElementById('mod-actions').textContent = settings.mod_actions || '-';
+    }
+
+    // Load recent activity
+    async function loadActivity(guildId) {
+        try {
+            const response = await fetch(`/api/guild/${guildId}/activity`);
+            const activities = await response.json();
+            
+            const activityList = document.getElementById('activity-list');
+            activityList.innerHTML = '';
+            
+            activities.forEach(activity => {
+                const activityItem = document.createElement('div');
+                activityItem.className = 'activity-item';
+                activityItem.innerHTML = `
+                    <div class="activity-icon">
+                        <i class="fas ${getActivityIcon(activity.type)}"></i>
+                    </div>
+                    <div class="activity-details">
+                        <span class="activity-text">${activity.description}</span>
+                        <span class="activity-time">${formatTime(activity.timestamp)}</span>
+                    </div>
+                `;
+                activityList.appendChild(activityItem);
+            });
+        } catch (error) {
+            console.error('Error loading activity:', error);
+        }
+    }
+
+    // Get icon for activity type
+    function getActivityIcon(type) {
+        const icons = {
+            'ban': 'fa-ban',
+            'kick': 'fa-boot',
+            'timeout': 'fa-clock',
+            'prefix': 'fa-terminal',
+            'cog': 'fa-cog'
+        };
+        return icons[type] || 'fa-info-circle';
+    }
+
+    // Format timestamp
+    function formatTime(timestamp) {
+        return new Date(timestamp).toLocaleString();
+    }
+
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        loadServers();
+        
+        // Server selection change
+        document.getElementById('server-select').addEventListener('change', (e) => {
+            if (e.target.value) {
+                loadServerSettings(e.target.value);
+                loadActivity(e.target.value);
+            }
+        });
+        
+        // Form submissions
+        document.getElementById('prefix-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const prefix = document.getElementById('prefix-input').value;
+            const guildId = document.getElementById('server-select').value;
+            
+            try {
+                await fetch(`/api/guild/${guildId}/prefix`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prefix })
+                });
+                showNotification('Prefix updated successfully!', 'success');
+            } catch (error) {
+                showNotification('Failed to update prefix', 'error');
+            }
+        });
+        
+        // Add similar event listeners for other forms
+    });
+
+    // Show notification
+    function showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }, 100);
+    }
+</script>
+{% endblock %} 

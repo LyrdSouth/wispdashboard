@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome - WISP Bot Dashboard{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="hero-content">
+        <h1>Welcome to WISP Bot</h1>
+        <p>A powerful Discord bot for moderation, utility, and fun!</p>
+        <div class="hero-buttons">
+            <a href="{{ url_for('login') }}" class="btn btn-primary">
+                <i class="fab fa-discord"></i>
+                Login with Discord
+            </a>
+            <a href="https://discord.gg/KWPVEZ277v" class="btn btn-secondary" target="_blank">
+                <i class="fas fa-users"></i>
+                Join Support Server
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="features-section">
+    <h2>Features</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <i class="fas fa-shield-alt"></i>
+            <h3>Moderation</h3>
+            <p>Powerful moderation tools including ban, kick, timeout, and more.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fas fa-image"></i>
+            <h3>Image Commands</h3>
+            <p>Fun image manipulation commands like deepfry, caption, and mirror.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fas fa-cog"></i>
+            <h3>Customization</h3>
+            <p>Custom prefixes, security logs, and more per server settings.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fas fa-bolt"></i>
+            <h3>Slash Commands</h3>
+            <p>Modern slash command support for better user experience.</p>
+        </div>
+    </div>
+</div>
+
+<div class="stats-section">
+    <h2>Bot Statistics</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <i class="fas fa-server"></i>
+            <div class="stat-info">
+                <span class="stat-value" id="server-count">Loading...</span>
+                <span class="stat-label">Servers</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-users"></i>
+            <div class="stat-info">
+                <span class="stat-value" id="user-count">Loading...</span>
+                <span class="stat-label">Users</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-terminal"></i>
+            <div class="stat-info">
+                <span class="stat-value" id="command-count">Loading...</span>
+                <span class="stat-label">Commands</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Fetch bot statistics
+    async function fetchStats() {
+        try {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+            
+            document.getElementById('server-count').textContent = data.servers;
+            document.getElementById('user-count').textContent = data.users;
+            document.getElementById('command-count').textContent = data.commands;
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    }
+    
+    // Fetch stats when page loads
+    document.addEventListener('DOMContentLoaded', fetchStats);
+</script>
+{% endblock %} 
