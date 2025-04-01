@@ -12,7 +12,6 @@
 <body>
     <aside class="sidebar">
         <div class="sidebar-logo">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="WISP Bot Logo">
             <h1>WISP</h1>
         </div>
         <nav class="nav-links">
@@ -41,12 +40,31 @@
                 <i data-feather="bar-chart-2"></i>
                 Analytics
             </a>
+
+            <div class="nav-divider"></div>
+
+            <div class="sidebar-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Version</span>
+                    <span class="version-tag">1.2.0.0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Active Servers</span>
+                    <span class="stat-value" id="sidebarServerCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Users</span>
+                    <span class="stat-value" id="sidebarUserCount">0</span>
+                </div>
+            </div>
+
             <div style="flex-grow: 1;"></div>
+            
             <div class="user-section">
                 {% if session.user.avatar %}
                 <img src="https://cdn.discordapp.com/avatars/{{ session.user.id }}/{{ session.user.avatar }}.png" 
                      alt="User Avatar" 
-                     style="width: 32px; height: 32px; border-radius: 50%; margin-right: 12px;">
+                     style="width: 28px; height: 28px; border-radius: 50%; margin-right: 12px;">
                 {% endif %}
                 <span style="color: var(--text-secondary); font-size: 0.875rem;">{{ session.user.username }}</span>
             </div>
@@ -70,6 +88,15 @@
 
     <script>
         feather.replace();
+        
+        // Update sidebar stats
+        fetch('/api/stats')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('sidebarServerCount').textContent = data.servers.toLocaleString();
+                document.getElementById('sidebarUserCount').textContent = data.users.toLocaleString();
+            })
+            .catch(error => console.error('Error fetching stats:', error));
     </script>
     {% block scripts %}{% endblock %}
 </body>
