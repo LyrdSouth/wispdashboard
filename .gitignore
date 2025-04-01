@@ -1,5 +1,9 @@
 # Environment variables
 .env
+.env.*
+
+# Netlify configuration
+netlify.toml
 
 # Python
 __pycache__/
@@ -33,6 +37,10 @@ ENV/
 .vscode/
 *.swp
 *.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Bot specific
 prefixes.json 
