@@ -36,9 +36,16 @@ def index():
         return redirect(url_for('dashboard'))
     return render_template('index.html')
 
+# Ensure we handle both www and non-www domains
+def get_redirect_uri():
+    if request.host.startswith('www.'):
+        return 'https://www.wispbot.site/callback'
+    return 'https://wispbot.site/callback'
+
 @app.route('/login')
 def login():
-    return redirect(f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify%20guilds')
+    redirect_uri = get_redirect_uri()
+    return redirect(f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope=identify%20guilds')
 
 @app.route('/callback')
 def callback():
@@ -49,12 +56,13 @@ def callback():
     if not code:
         return redirect(url_for('index'))
     
+    redirect_uri = get_redirect_uri()
     data = {
         'client_id': DISCORD_CLIENT_ID,
         'client_secret': DISCORD_CLIENT_SECRET,
         'grant_type': 'authorization_code',
         'code': code,
-        'redirect_uri': DISCORD_REDIRECT_URI
+        'redirect_uri': redirect_uri
     }
     
     headers = {
