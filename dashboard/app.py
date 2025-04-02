@@ -13,7 +13,8 @@ from bot_connection import (
     update_guild_settings, 
     get_combined_guild_data, 
     store_guild_info, 
-    get_file_path
+    get_file_path,
+    sync_with_bot
 )
 import asyncio
 import datetime
