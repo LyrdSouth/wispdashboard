@@ -33,100 +33,36 @@ def ensure_settings_file():
 ensure_settings_file()
 
 def get_guild_settings(guild_id: str) -> Dict[str, Any]:
-    """Get settings for a specific guild"""
-    if guild_id is None:
-        return {}
-    
+    """Get settings for a guild"""
     try:
-        # Check cache first
-        if guild_id in settings_cache:
-            return settings_cache[guild_id].copy()
-        
-        # Load from file if not in cache
-        try:
-            settings_file = get_file_path('settings.json')
-            with open(settings_file, 'r') as f:
+        if os.path.exists(get_file_path('settings.json')):
+            with open(get_file_path('settings.json'), 'r') as f:
                 all_settings = json.load(f)
-                settings_cache.update(all_settings)
-        except FileNotFoundError:
-            # Create an empty settings file
-            settings_file = get_file_path('settings.json')
-            with open(settings_file, 'w') as f:
-                json.dump({}, f)
-            settings_cache[guild_id] = {}
-        except json.JSONDecodeError:
-            # Reset the file if it's corrupted
-            settings_file = get_file_path('settings.json')
-            with open(settings_file, 'w') as f:
-                json.dump({}, f)
-            settings_cache[guild_id] = {}
-        
-        # Initialize with defaults if not exist
-        if guild_id not in settings_cache:
-            settings_cache[guild_id] = {}
-        
-        # Return a copy to prevent unintended modifications
-        settings = settings_cache.get(guild_id, {}).copy()
-        
-        # Ensure required fields exist
-        if 'prefix' not in settings:
-            settings['prefix'] = '?'
-        if 'cogs' not in settings:
-            settings['cogs'] = ['image', 'security']
-        if 'command_count' not in settings:
-            settings['command_count'] = 0
-        if 'mod_actions' not in settings:
-            settings['mod_actions'] = 0
-        if 'activity' not in settings:
-            settings['activity'] = []
-        
-        return settings
+                return all_settings.get(str(guild_id), {})
     except Exception as e:
-        print(f"Error in get_guild_settings: {e}")
-        # Return default settings on error
-        return {
-            'prefix': '?',
-            'cogs': ['image', 'security'],
-            'command_count': 0,
-            'mod_actions': 0,
-            'activity': []
-        }
+        print(f"Error loading guild settings: {e}")
+    return {}
 
 def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
-    """Update settings for a specific guild"""
+    """Update settings for a guild"""
     try:
-        # Store the last update time
-        settings['last_updated'] = datetime.now().isoformat()
+        # Create settings directory if it doesn't exist
+        os.makedirs(os.path.dirname(get_file_path('settings.json')), exist_ok=True)
         
-        # Make sure we preserve any server info we have
-        if 'name' not in settings and guild_id in settings_cache and 'name' in settings_cache[guild_id]:
-            settings['name'] = settings_cache[guild_id]['name']
-        
-        if 'icon' not in settings and guild_id in settings_cache and 'icon' in settings_cache[guild_id]:
-            settings['icon'] = settings_cache[guild_id]['icon']
-            
-        if 'member_count' not in settings and guild_id in settings_cache and 'member_count' in settings_cache[guild_id]:
-            settings['member_count'] = settings_cache[guild_id]['member_count']
-        
-        # Update cache
-        settings_cache[guild_id] = settings.copy()
-            
-        # Save to local file
-        try:
-            settings_file = get_file_path('settings.json')
-            with open(settings_file, 'r') as f:
+        # Load existing settings
+        if os.path.exists(get_file_path('settings.json')):
+            with open(get_file_path('settings.json'), 'r') as f:
                 all_settings = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        else:
             all_settings = {}
         
         # Update settings for this guild
-        all_settings[guild_id] = settings
+        all_settings[str(guild_id)] = settings
         
-        # Save to file
-        settings_file = get_file_path('settings.json')
-        with open(settings_file, 'w') as f:
+        # Save back to file
+        with open(get_file_path('settings.json'), 'w') as f:
             json.dump(all_settings, f, indent=4)
-        
+            
         print(f"Successfully saved settings for guild {guild_id}")
         return True
     except Exception as e:

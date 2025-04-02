@@ -43,4 +43,10 @@ ENV/
 Thumbs.db
 
 # Bot specific
-prefixes.json 
+prefixes.json
+
+# Logs
+*.log
+
+# Local settings
+guild_settings.json 
