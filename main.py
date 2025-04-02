@@ -8,11 +8,18 @@ import io
 import aiohttp
 import asyncio
 import typing
+from datetime import datetime
+from flask import Flask, request, jsonify
 
 # Load environment variables
 load_dotenv()
-# to use this, create a .env file and put the your token in it, label it "DISCORD_TOKEN" the bot literally wont work if you dont, if you arent smart enough to do this, you dont deserve to use this bot.
 
+# Settings file path
+SETTINGS_FILE = 'settings.json'
+
+# Flask app for API
+api_app = Flask(__name__)
+api_app.config['JSON_SORT_KEYS'] = False
 
 # Bot configuration
 intents = discord.Intents.default()
@@ -22,18 +29,183 @@ intents.members = True
 # Define embed color
 EMBED_COLOR = discord.Color.from_rgb(187, 144, 252)  # Soft purple color
 
+# Settings management
+settings_cache = {}
+
+# API Authentication
+def authenticate_request():
+    auth_header = request.headers.get('Authorization')
+    expected_token = f"Bearer {os.getenv('DISCORD_TOKEN')}"
+    
+    if not auth_header or auth_header != expected_token:
+        return False
+    return True
+
+# API Routes
+@api_app.route('/api/settings/<guild_id>', methods=['GET'])
+def api_get_guild_settings(guild_id):
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    settings = get_guild_settings(guild_id)
+    return jsonify(settings)
+
+@api_app.route('/api/settings/<guild_id>', methods=['POST'])
+def api_update_guild_settings(guild_id):
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.json
+    success = update_guild_settings(guild_id, data)
+    
+    if success:
+        return jsonify({"success": True, "settings": data})
+    else:
+        return jsonify({"error": "Failed to update settings"}), 500
+
+@api_app.route('/api/guilds', methods=['GET'])
+def api_get_guilds():
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    guilds = []
+    for guild in bot.guilds:
+        guilds.append({
+            "id": str(guild.id),
+            "name": guild.name,
+            "icon": guild.icon.url if guild.icon else None,
+            "member_count": guild.member_count
+        })
+    
+    return jsonify(guilds)
+
+@api_app.route('/api/channels/<guild_id>', methods=['GET'])
+def api_get_channels(guild_id):
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        return jsonify({"error": "Guild not found"}), 404
+    
+    channels = []
+    for channel in guild.text_channels:
+        channels.append({
+            "id": str(channel.id),
+            "name": channel.name,
+            "type": 0,  # Text channel
+            "position": channel.position
+        })
+    
+    return jsonify(channels)
+
+def get_guild_settings(guild_id: str) -> dict:
+    """Get settings for a specific guild"""
+    if guild_id is None:
+        return settings_cache
+    
+    if guild_id not in settings_cache:
+        # Load settings from file
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                settings_cache.update(json.load(f))
+        except FileNotFoundError:
+            settings_cache[guild_id] = {}
+        except json.JSONDecodeError:
+            settings_cache[guild_id] = {}
+    
+    # Return a copy to prevent unintended modifications
+    settings = settings_cache.get(guild_id, {}).copy()
+    
+    # Ensure required fields exist
+    if 'prefix' not in settings:
+        settings['prefix'] = '?'
+    if 'cogs' not in settings:
+        settings['cogs'] = ['image', 'security']
+    if 'command_count' not in settings:
+        settings['command_count'] = 0
+    if 'mod_actions' not in settings:
+        settings['mod_actions'] = 0
+    if 'activity' not in settings:
+        settings['activity'] = []
+    
+    # Add guild info from Discord if available
+    guild = bot.get_guild(int(guild_id)) if bot else None
+    if guild:
+        settings['name'] = guild.name
+        settings['icon'] = str(guild.icon.url) if guild.icon else None
+        settings['member_count'] = guild.member_count
+    
+    return settings
+
+def update_guild_settings(guild_id: str, settings: dict) -> bool:
+    """Update settings for a specific guild"""
+    try:
+        # Update cache
+        settings_cache[guild_id] = settings.copy()
+        
+        # Load existing settings
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                all_settings = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            all_settings = {}
+        
+        # Update settings for this guild
+        all_settings[guild_id] = settings
+        
+        # Save to file
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(all_settings, f, indent=4)
+        
+        return True
+    except Exception as e:
+        print(f"Error updating settings: {e}")
+        return False
+
+def increment_command_count(guild_id: str):
+    """Increment command count for a specific guild"""
+    try:
+        settings = get_guild_settings(guild_id)
+        settings['command_count'] = settings.get('command_count', 0) + 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing command count: {e}")
+
+def increment_mod_action(guild_id: str):
+    """Increment moderation action count for a specific guild"""
+    try:
+        settings = get_guild_settings(guild_id)
+        settings['mod_actions'] = settings.get('mod_actions', 0) + 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing mod action: {e}")
+
 # Initialize bot with both prefix and slash commands
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix='?',
+            command_prefix=self.get_prefix,
             intents=intents,
-            application_id=os.getenv('APPLICATION_ID')  # Add this to your .env file
+            application_id=os.getenv('APPLICATION_ID')
         )
         self.initial_extensions = [
             'image',
             'security'
         ]
+        self.settings_cache = {}
+
+    async def get_prefix(self, message):
+        """Get prefix for a guild"""
+        if not message.guild:
+            return '?'
+        
+        guild_id = str(message.guild.id)
+        if guild_id not in self.settings_cache:
+            settings = get_guild_settings(guild_id)
+            self.settings_cache[guild_id] = settings
+        
+        return self.settings_cache[guild_id].get('prefix', '?')
 
     async def setup_hook(self):
         """Load extensions and sync commands"""
@@ -47,6 +219,31 @@ class Bot(commands.Bot):
     async def on_ready(self):
         print(f'Bot is ready! Logged in as {self.user.name}')
         await self.change_presence(activity=discord.Game(name="?help or /help"))
+        
+        # Start the API in a separate thread
+        import threading
+        def run_api():
+            api_app.run(host='0.0.0.0', port=6150)
+        
+        api_thread = threading.Thread(target=run_api)
+        api_thread.daemon = True
+        api_thread.start()
+        print("API server started on port 6150")
+
+    async def on_command(self, ctx):
+        """Track command usage"""
+        if ctx.guild:
+            increment_command_count(str(ctx.guild.id))
+
+    async def on_command_error(self, ctx, error):
+        """Handle command errors"""
+        if isinstance(error, commands.CommandNotFound):
+            return
+        elif isinstance(error, commands.MissingPermissions):
+            await ctx.send("You don't have permission to use this command!")
+        else:
+            print(f"Error in command {ctx.command}: {error}")
+            await ctx.send("An error occurred while executing this command.")
 
 bot = Bot()
 bot.remove_command('help')  # Remove default help command
@@ -57,9 +254,29 @@ last_deleted_message = {}
 # Load custom prefixes
 def load_prefixes():
     try:
+        # First, try to read from settings.json which the dashboard uses
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                all_settings = json.load(f)
+                
+                # Convert to prefix format
+                prefix_dict = {}
+                for guild_id, settings in all_settings.items():
+                    if 'prefix' in settings:
+                        prefix_dict[guild_id] = settings['prefix']
+                
+                print(f"Loaded {len(prefix_dict)} prefixes from settings.json")
+                return prefix_dict
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+            
+        # Fall back to prefixes.json for backward compatibility
         with open('prefixes.json', 'r') as f:
-            return json.load(f)
+            prefixes = json.load(f)
+            print(f"Loaded {len(prefixes)} prefixes from prefixes.json")
+            return prefixes
     except FileNotFoundError:
+        print("No prefix files found, using default prefix")
         return {}
 
 prefixes = load_prefixes()
@@ -101,6 +318,10 @@ async def ban(ctx, user: typing.Union[discord.Member, discord.User, int], *, rea
             pass  # Silently fail if we can't DM the user
 
         await ctx.guild.ban(user, reason=reason)
+        
+        # Track moderation action
+        increment_mod_action(str(ctx.guild.id))
+        
         embed = discord.Embed(
             description=f'Banned {user.mention}\nReason: {reason if reason else "No reason provided"}',
             color=EMBED_COLOR
@@ -490,8 +711,8 @@ async def slash_kick(interaction: discord.Interaction, user: discord.Member, rea
 async def slash_timeout(interaction: discord.Interaction, user: discord.Member, duration: int, reason: str = None):
     if user.top_role >= interaction.user.top_role:
         await interaction.response.send_message("You cannot timeout this user due to role hierarchy!", ephemeral=True)
-        return
-    
+            return
+        
     # Try to DM the user
     try:
         dm_embed = discord.Embed(
@@ -515,8 +736,8 @@ async def slash_timeout(interaction: discord.Interaction, user: discord.Member, 
 async def slash_untimeout(interaction: discord.Interaction, user: discord.Member, reason: str = None):
     if user.top_role >= interaction.user.top_role:
         await interaction.response.send_message("You cannot remove timeout from this user due to role hierarchy!", ephemeral=True)
-        return
-    
+            return
+        
     # Try to DM the user
     try:
         dm_embed = discord.Embed(
@@ -674,6 +895,39 @@ async def slash_repo(interaction: discord.Interaction):
         color=EMBED_COLOR
     )
     await interaction.response.send_message(embed=embed)
+
+# Save prefix to the JSON file
+def save_prefix(guild_id, prefix):
+    prefixes = load_prefixes()
+    prefixes[str(guild_id)] = prefix
+    
+    # Save to prefixes.json for backward compatibility
+    with open('prefixes.json', 'w') as f:
+        json.dump(prefixes, f, indent=4)
+    
+    # Also update settings.json which the dashboard uses
+    try:
+        # Load existing settings
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                all_settings = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            all_settings = {}
+        
+        # Update prefix in settings
+        guild_id_str = str(guild_id)
+        if guild_id_str not in all_settings:
+            all_settings[guild_id_str] = {}
+        
+        all_settings[guild_id_str]['prefix'] = prefix
+        
+        # Save updated settings
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(all_settings, f, indent=4)
+            
+        print(f"Updated prefix in {SETTINGS_FILE} for guild {guild_id}")
+    except Exception as e:
+        print(f"Error updating prefix in settings.json: {e}")
 
 # Run the bot
 bot.run(os.getenv('DISCORD_TOKEN')) 
