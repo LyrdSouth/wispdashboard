@@ -119,9 +119,14 @@
                 <img src="{{ guild_icon_url }}" alt="{{ guild_name }}" class="rounded-circle me-3" style="width: 64px; height: 64px;">
                 <h1 class="h3 mb-0">{{ guild_name }}</h1>
             </div>
-            <a href="{{ url_for('select_server') }}" class="btn btn-outline-primary">
-                <i class="bi bi-arrow-left"></i> Change Server
-            </a>
+            <div>
+                <button class="btn btn-primary me-2" onclick="saveAllSettings()">
+                    <i class="bi bi-save"></i> Save Changes
+                </button>
+                <a href="{{ url_for('select_server') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-arrow-left"></i> Change Server
+                </a>
+            </div>
         </div>
 
         <div class="row">
@@ -134,10 +139,7 @@
                     <div class="card-body">
                         <div class="mb-3">
                             <label for="prefix" class="form-label">Command Prefix</label>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="prefix" value="{{ settings.prefix }}" maxlength="3">
-                                <button class="btn btn-primary" onclick="updatePrefix()">Save</button>
-                            </div>
+                            <input type="text" class="form-control" id="prefix" value="{{ settings.prefix }}" maxlength="3">
                         </div>
                         
                         <div class="mb-3">
@@ -220,14 +222,20 @@
             "timeOut": "3000"
         };
 
-        // Update prefix
-        function updatePrefix() {
+        // Save all settings
+        function saveAllSettings() {
             const prefix = document.getElementById('prefix').value;
+            const channelId = $('#logChannel').val();
+            const cogs = [];
+            if (document.getElementById('imageToggle').checked) cogs.push('image');
+            if (document.getElementById('securityToggle').checked) cogs.push('security');
+
             if (prefix.length > 3) {
                 toastr.error('Prefix must be 3 characters or less');
                 return;
             }
 
+            // Save prefix
             fetch(`/api/guild/{{ guild_id }}/prefix`, {
                 method: 'POST',
                 headers: {
@@ -235,74 +243,35 @@
                 },
                 body: JSON.stringify({ prefix })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    toastr.success(`Prefix updated to: ${prefix}`);
-                    loadActivity(); // Reload activity after update
-                } else {
-                    toastr.error(data.error || 'Failed to update prefix');
-                }
+            .then(() => {
+                // Save log channel
+                return fetch(`/api/guild/{{ guild_id }}/log-channel`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ channel_id: channelId })
+                });
+            })
+            .then(() => {
+                // Save cogs
+                return fetch(`/api/guild/{{ guild_id }}/cogs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ cogs })
+                });
+            })
+            .then(() => {
+                toastr.success('All settings saved successfully');
+                loadActivity();
             })
             .catch(error => {
-                toastr.error('Error updating prefix');
+                toastr.error('Error saving settings');
+                console.error('Error:', error);
             });
         }
-
-        // Update log channel
-        $('#logChannel').on('change', function() {
-            const channelId = $(this).val();
-            fetch(`/api/guild/{{ guild_id }}/log-channel`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ channel_id: channelId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    toastr.success('Log channel updated');
-                    loadActivity(); // Reload activity after update
-                } else {
-                    toastr.error(data.error || 'Failed to update log channel');
-                }
-            })
-            .catch(error => {
-                toastr.error('Error updating log channel');
-            });
-        });
-
-        // Update cogs
-        function updateCogs() {
-            const cogs = [];
-            if (document.getElementById('imageToggle').checked) cogs.push('image');
-            if (document.getElementById('securityToggle').checked) cogs.push('security');
-
-            fetch(`/api/guild/{{ guild_id }}/cogs`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ cogs })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    toastr.success('Features updated');
-                    loadActivity(); // Reload activity after update
-                } else {
-                    toastr.error(data.error || 'Failed to update features');
-                }
-            })
-            .catch(error => {
-                toastr.error('Error updating features');
-            });
-        }
-
-        // Add event listeners for toggles
-        document.getElementById('imageToggle').addEventListener('change', updateCogs);
-        document.getElementById('securityToggle').addEventListener('change', updateCogs);
 
         // Load activity
         function loadActivity() {
