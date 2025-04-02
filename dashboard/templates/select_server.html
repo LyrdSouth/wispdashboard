@@ -64,18 +64,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             serverCard.className = 'server-card';
             
             // Use default icon placeholder if no icon
-            const serverIcon = server.icon 
-                ? `<img src="https://cdn.discordapp.com/icons/${server.id}/${server.icon}.png" alt="${server.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`
-                : '';
+            let serverIconHtml = '';
+            if (server.icon) {
+                console.log(`Server ${server.name} has icon: ${server.icon}`);
+                const iconUrl = `https://cdn.discordapp.com/icons/${server.id}/${server.icon}.png`;
+                serverIconHtml = `<img src="${iconUrl}" alt="${server.name}" onerror="console.error('Failed to load icon for ${server.name}'); this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+            }
+            
+            const nameInitial = server.name ? server.name.charAt(0).toUpperCase() : '?';
             
             serverCard.innerHTML = `
                 <div class="server-icon">
-                    ${serverIcon}
-                    <div class="server-icon-placeholder" ${server.icon ? 'style="display:none;"' : ''}>${server.name.charAt(0).toUpperCase()}</div>
+                    ${serverIconHtml}
+                    <div class="server-icon-placeholder" ${server.icon ? 'style="display:none;"' : ''}>${nameInitial}</div>
                 </div>
                 <div class="server-info">
-                    <h3>${server.name}</h3>
-                    <p>${server.member_count || ''} members</p>
+                    <h3>${server.name || 'Unknown Server'}</h3>
+                    <p>${server.member_count > 0 ? `${server.member_count} members` : ''}</p>
                 </div>
             `;
             

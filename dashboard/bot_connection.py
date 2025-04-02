@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any
 import requests
+import traceback
 
 # Load environment variables
 load_dotenv()
@@ -137,23 +138,35 @@ def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
 def store_guild_info(guild_id: str, guild_data: Dict[str, Any]) -> None:
     """Store guild information from Discord API in our settings"""
     try:
+        print(f"Storing guild info for {guild_id}: {guild_data.get('name')}")
+        print(f"Guild data: {json.dumps(guild_data, indent=2)}")
+        
         # Get current settings
         settings = get_guild_settings(guild_id)
         
         # Update with guild data
         if 'name' in guild_data:
             settings['name'] = guild_data['name']
+            print(f"Stored name: {guild_data['name']}")
         
-        if 'icon' in guild_data:
+        if 'icon' in guild_data and guild_data['icon']:
             settings['icon'] = guild_data['icon']
+            print(f"Stored icon: {guild_data['icon']}")
             
         if 'owner_id' in guild_data:
             settings['owner_id'] = guild_data['owner_id']
             
-        if 'approximate_member_count' in guild_data:
+        # Try different member count fields that Discord might provide
+        if 'approximate_member_count' in guild_data and guild_data['approximate_member_count']:
             settings['member_count'] = guild_data['approximate_member_count']
-        elif 'member_count' in guild_data:
+            print(f"Stored member count from approximate_member_count: {guild_data['approximate_member_count']}")
+        elif 'member_count' in guild_data and guild_data['member_count']:
             settings['member_count'] = guild_data['member_count']
+            print(f"Stored member count from member_count: {guild_data['member_count']}")
+        elif 'approximate_presence_count' in guild_data and guild_data['approximate_presence_count']:
+            # If we don't have member count but have presence count, use that as an estimate
+            settings['member_count'] = guild_data['approximate_presence_count']
+            print(f"Stored member count from approximate_presence_count: {guild_data['approximate_presence_count']}")
         
         # Save the updated settings
         update_guild_settings(guild_id, settings)
@@ -161,6 +174,7 @@ def store_guild_info(guild_id: str, guild_data: Dict[str, Any]) -> None:
         print(f"Successfully stored guild info for {guild_id}: {settings.get('name', 'Unknown')}")
     except Exception as e:
         print(f"Error storing guild info: {e}")
+        print(traceback.format_exc())
 
 # Get bot and guild data combined
 def get_combined_guild_data(guild_id: str) -> Dict[str, Any]:

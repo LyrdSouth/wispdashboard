@@ -319,24 +319,51 @@ def get_guild(guild_id):
             # Try different Discord API endpoints to get the most data
             logger.debug(f"Fetching guild data from Discord API")
             
-            # Try the /users/@me/guilds endpoint first
+            # Try to get extended guild info (with member count)
             try:
-                guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
-                if guilds_response.status_code == 200:
-                    user_guilds = guilds_response.json()
-                    # Find the specific guild in the user's guilds
-                    matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
-                    if matching_guild:
-                        logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
-                        # Store this info for future use
-                        store_guild_info(guild_id, matching_guild)
-                        # Refresh our result with the latest data
-                        result = get_combined_guild_data(guild_id)
+                logger.debug(f"Fetching detailed guild data to get member count")
+                detailed_guild_response = requests.get(
+                    f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}?with_counts=true', 
+                    headers=headers
+                )
+                
+                if detailed_guild_response.status_code == 200:
+                    guild_data = detailed_guild_response.json()
+                    logger.info(f"Got detailed guild data with member count: {guild_data.get('name')} ({guild_data.get('approximate_member_count', 0)} members)")
+                    store_guild_info(guild_id, guild_data)
+                    result = get_combined_guild_data(guild_id)
+                else:
+                    logger.warning(f"Could not get detailed guild data: {detailed_guild_response.status_code}")
+                    
+                    # Try the /users/@me/guilds endpoint as fallback
+                    guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+                    if guilds_response.status_code == 200:
+                        user_guilds = guilds_response.json()
+                        # Find the specific guild in the user's guilds
+                        matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
+                        if matching_guild:
+                            logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
+                            store_guild_info(guild_id, matching_guild)
+                            result = get_combined_guild_data(guild_id)
             except Exception as e:
-                logger.error(f"Error getting user guilds: {e}")
-                # Continue with local data if Discord API fails
+                logger.error(f"Error getting detailed guild data: {e}")
+                logger.error(traceback.format_exc())
+                
+                # Try the /users/@me/guilds endpoint as fallback
+                try:
+                    guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+                    if guilds_response.status_code == 200:
+                        user_guilds = guilds_response.json()
+                        # Find the specific guild in the user's guilds
+                        matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
+                        if matching_guild:
+                            logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
+                            store_guild_info(guild_id, matching_guild)
+                            result = get_combined_guild_data(guild_id)
+                except Exception as guilds_error:
+                    logger.error(f"Error getting user guilds: {guilds_error}")
         
-        logger.info(f"Returning guild data: {result['name']}")
+        logger.info(f"Returning guild data: {result['name']} (Member count: {result.get('member_count', 0)})")
         return jsonify(result)
     except Exception as e:
         logger.error(f"Unhandled error in get_guild: {e}")

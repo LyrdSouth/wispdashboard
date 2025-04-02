@@ -135,12 +135,16 @@
 <script>
 // Function to create initials icon as fallback
 function createInitialsIcon(serverName) {
+    console.log("Creating initials icon for:", serverName);
     const initialsElement = document.getElementById('server-initials');
     if (initialsElement) {
         // Get first letter of server name or use '?' if empty
         const initial = serverName ? serverName.charAt(0).toUpperCase() : '?';
         initialsElement.textContent = initial;
         initialsElement.style.display = 'flex';
+        console.log("Set initial to:", initial);
+    } else {
+        console.error("Could not find server-initials element");
     }
 }
 
@@ -208,22 +212,32 @@ async function refreshGuildData() {
         document.getElementById('server-name').textContent = serverData.name || 'Unknown Server';
         document.getElementById('prefix').value = serverSettings.prefix || '?';
         
-        // Update server icon
+        // Update server icon with better error handling
         const serverIcon = document.getElementById('server-icon');
         if (serverData.icon) {
-            serverIcon.src = `https://cdn.discordapp.com/icons/${guildId}/${serverData.icon}.png`;
+            console.log("Server has icon:", serverData.icon);
+            const iconUrl = `https://cdn.discordapp.com/icons/${guildId}/${serverData.icon}.png`;
+            console.log("Setting icon URL:", iconUrl);
+            serverIcon.src = iconUrl;
             serverIcon.onerror = function() {
+                console.error("Icon failed to load:", this.src);
                 this.style.display = 'none';
                 createInitialsIcon(serverData.name || 'Unknown Server');
             };
+            serverIcon.onload = function() {
+                console.log("Icon loaded successfully");
+            };
         } else {
+            console.log("Server has no icon, using initials");
             serverIcon.style.display = 'none';
             createInitialsIcon(serverData.name || 'Unknown Server');
         }
         
-        // Update stats
-        if (serverData.member_count) {
+        // Update stats with better fallbacks
+        if (serverData.member_count && serverData.member_count > 0) {
             document.getElementById('member-count').textContent = serverData.member_count;
+        } else {
+            document.getElementById('member-count').textContent = 'N/A';
         }
         document.getElementById('command-count').textContent = serverSettings.command_count || 0;
         document.getElementById('mod-actions').textContent = serverSettings.mod_actions || 0;
