@@ -95,6 +95,7 @@ class Bot(commands.Bot):
             'security'
         ]
         self.settings_cache = {}
+        self.disabled_cogs = {}  # Store disabled cogs per guild
 
     async def get_prefix(self, message):
         """Get prefix for a guild"""
@@ -145,6 +146,15 @@ class Bot(commands.Bot):
             except Exception as e:
                 print(f"Failed to load extension {ext}: {e}")
 
+        # Load all cogs initially
+        for filename in os.listdir('./cogs'):
+            if filename.endswith('.py'):
+                try:
+                    await self.load_extension(f'cogs.{filename[:-3]}')
+                    print(f'Loaded cog: {filename[:-3]}')
+                except Exception as e:
+                    print(f'Failed to load cog {filename}: {e}')
+
     async def on_ready(self):
         """Called when the bot is ready"""
         print(f"Logged in as {self.user.name} ({self.user.id})")
@@ -154,6 +164,7 @@ class Bot(commands.Bot):
         for guild in self.guilds:
             guild_id = str(guild.id)
             cogs = os.getenv(f'COGS_{guild_id}', '').split(',')
+            self.disabled_cogs[guild_id] = []
             for cog in cogs:
                 if cog:
                     try:
@@ -164,6 +175,15 @@ class Bot(commands.Bot):
     async def on_command(self, ctx):
         """Called when a command is invoked"""
         try:
+            # Check if the command's cog is disabled
+            if ctx.cog:
+                cog_name = ctx.cog.__class__.__name__.lower()
+                guild_id = str(ctx.guild.id)
+                
+                if guild_id in self.disabled_cogs and cog_name in self.disabled_cogs[guild_id]:
+                    await ctx.send("⚠️ This module has been disabled by your server owner.")
+                    return
+            
             increment_command_count(str(ctx.guild.id))
             # Log command usage
             guild_id = str(ctx.guild.id)
@@ -181,6 +201,12 @@ class Bot(commands.Bot):
             return
         elif isinstance(error, commands.MissingPermissions):
             await ctx.send("You don't have permission to use this command!")
+        elif isinstance(error, commands.CheckFailure):
+            if ctx.cog and str(ctx.guild.id) in self.disabled_cogs:
+                cog_name = ctx.cog.__class__.__name__.lower()
+                if cog_name in self.disabled_cogs[str(ctx.guild.id)]:
+                    await ctx.send("⚠️ This module has been disabled by your server owner.")
+                    return
         else:
             print(f"Command error: {error}")
             await ctx.send(f"An error occurred: {str(error)}")

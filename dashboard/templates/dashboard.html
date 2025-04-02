@@ -258,13 +258,16 @@
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="card-title">Features</h5>
+                        <h5 class="card-title">Modules</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <label class="form-label mb-0">Image Commands</label>
-                                <label class="feature-toggle">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <label class="form-label mb-0">Image Module</label>
+                                    <p class="text-muted small mb-0">Generate and manipulate images, create memes, and more</p>
+                                </div>
+                                <label class="feature-toggle ms-3">
                                     <input type="checkbox" id="imageToggle" {% if 'image' in settings.cogs %}checked{% endif %}>
                                     <span class="slider"></span>
                                 </label>
@@ -272,9 +275,12 @@
                         </div>
                         
                         <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <label class="form-label mb-0">Security Commands</label>
-                                <label class="feature-toggle">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <label class="form-label mb-0">Security Module</label>
+                                    <p class="text-muted small mb-0">Moderation tools, auto-mod, raid protection, and logging</p>
+                                </div>
+                                <label class="feature-toggle ms-3">
                                     <input type="checkbox" id="securityToggle" {% if 'security' in settings.cogs %}checked{% endif %}>
                                     <span class="slider"></span>
                                 </label>
@@ -406,7 +412,7 @@
                             icon = 'bi-slash-circle';
                             break;
                         case 'features_update':
-                            message = `Features updated: ${item.data.cogs.join(', ')}`;
+                            message = `Modules updated: ${item.data.cogs.join(', ')}`;
                             icon = 'bi-toggles';
                             break;
                         case 'log_channel_update':
