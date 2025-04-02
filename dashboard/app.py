@@ -5,7 +5,7 @@ import requests
 from functools import wraps
 import json
 from werkzeug.middleware.proxy_fix import ProxyFix
-from bot_connection import bot_connection
+from bot_connection import set_bot, get_guild_settings, update_guild_settings, increment_command_count, increment_mod_action
 import asyncio
 import datetime
 import discord
@@ -14,7 +14,7 @@ import discord
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key')
 
 # Configure Flask for proxy
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
@@ -23,7 +23,7 @@ app.config['PREFERRED_URL_SCHEME'] = 'https'
 # Discord OAuth2 settings
 DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
 DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
-DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', 'https://www.wispbot.site/callback')
+DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', 'https://wispbot.site/callback')
 DISCORD_API_ENDPOINT = 'https://discord.com/api/v10'
 
 def login_required(f):
@@ -37,7 +37,7 @@ def login_required(f):
 @app.route('/')
 def index():
     if 'user' in session:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('select_server'))
     return render_template('index.html')
 
 # Ensure we handle both www and non-www domains
@@ -48,8 +48,7 @@ def get_redirect_uri():
 
 @app.route('/login')
 def login():
-    redirect_uri = get_redirect_uri()
-    return redirect(f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope=identify%20guilds')
+    return redirect(f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify%20guilds')
 
 @app.route('/callback')
 def callback():
@@ -60,29 +59,28 @@ def callback():
     if not code:
         return redirect(url_for('index'))
     
-    redirect_uri = get_redirect_uri()
     data = {
         'client_id': DISCORD_CLIENT_ID,
         'client_secret': DISCORD_CLIENT_SECRET,
         'grant_type': 'authorization_code',
         'code': code,
-        'redirect_uri': redirect_uri
+        'redirect_uri': DISCORD_REDIRECT_URI
     }
     
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
     }
     
-    response = requests.post('https://discord.com/api/oauth2/token', data=data, headers=headers)
+    response = requests.post(f'{DISCORD_API_ENDPOINT}/oauth2/token', data=data, headers=headers)
     if response.status_code != 200:
         return redirect(url_for('index'))
     
     tokens = response.json()
-    access_token = tokens['access_token']
+    session['access_token'] = tokens['access_token']
     
     # Get user data
     headers = {
-        'Authorization': f'Bearer {access_token}'
+        'Authorization': f'Bearer {tokens["access_token"]}'
     }
     
     response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me', headers=headers)
@@ -91,14 +89,22 @@ def callback():
     
     user_data = response.json()
     session['user'] = user_data
-    session['access_token'] = access_token
     
     return redirect(url_for('select_server'))
 
 @app.route('/select-server')
 @login_required
 def select_server():
-    return render_template('select_server.html')
+    headers = {
+        'Authorization': f'Bearer {session["access_token"]}'
+    }
+    
+    response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+    if response.status_code != 200:
+        return redirect(url_for('login'))
+    
+    guilds = response.json()
+    return render_template('select_server.html', guilds=guilds)
 
 @app.route('/dashboard')
 @login_required
@@ -107,20 +113,20 @@ def dashboard():
     if not guild_id:
         return redirect(url_for('select_server'))
     
-    # Check if user has access to this guild
+    # Verify user has access to this guild
     headers = {
         'Authorization': f'Bearer {session["access_token"]}'
     }
     
     response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
     if response.status_code != 200:
-        return redirect(url_for('select_server'))
+        return redirect(url_for('login'))
     
     guilds = response.json()
-    if not any(guild['id'] == guild_id for guild in guilds):
+    if not any(g['id'] == guild_id for g in guilds):
         return redirect(url_for('select_server'))
     
-    return render_template('dashboard.html', user=session['user'], guild_id=guild_id)
+    return render_template('dashboard.html', guild_id=guild_id)
 
 @app.route('/api/guilds')
 @login_required
@@ -139,18 +145,26 @@ def get_guilds():
 @login_required
 def get_guild(guild_id):
     try:
-        guild = bot.get_guild(int(guild_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-            
-        return jsonify({
-            'id': str(guild.id),
-            'name': guild.name,
-            'icon': guild.icon.url if guild.icon else None,
-            'owner': str(guild.owner_id),
-            'member_count': guild.member_count,
-            'settings': bot_connection.get_guild_settings(str(guild.id))
+        # Get guild settings
+        settings = get_guild_settings(guild_id)
+        
+        # Get guild info from Discord
+        headers = {
+            'Authorization': f'Bearer {session["access_token"]}'
+        }
+        
+        response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch guild data'}), 500
+        
+        guild_data = response.json()
+        
+        # Merge Discord data with settings
+        guild_data.update({
+            'settings': settings
         })
+        
+        return jsonify(guild_data)
     except Exception as e:
         print(f"Error getting guild: {e}")
         return jsonify({'error': str(e)}), 500
@@ -159,21 +173,18 @@ def get_guild(guild_id):
 @login_required
 def get_guild_channels(guild_id):
     try:
-        guild = bot.get_guild(int(guild_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-            
-        channels = []
-        for channel in guild.channels:
-            if isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
-                channels.append({
-                    'id': str(channel.id),
-                    'name': channel.name,
-                    'type': str(channel.type),
-                    'position': channel.position
-                })
+        headers = {
+            'Authorization': f'Bearer {session["access_token"]}'
+        }
         
-        return jsonify(channels)
+        response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}/channels', headers=headers)
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch channels'}), 500
+        
+        channels = response.json()
+        # Filter for text channels only
+        text_channels = [c for c in channels if c['type'] == 0]
+        return jsonify(text_channels)
     except Exception as e:
         print(f"Error getting channels: {e}")
         return jsonify({'error': str(e)}), 500
@@ -181,9 +192,32 @@ def get_guild_channels(guild_id):
 @app.route('/api/guild/<guild_id>/activity')
 @login_required
 def get_guild_activity(guild_id):
-    activity = bot_connection.load_activity()
-    guild_activity = activity.get(guild_id, [])
-    return jsonify(guild_activity)
+    try:
+        # Get recent activity from settings
+        settings = get_guild_settings(guild_id)
+        activity = settings.get('activity', [])
+        return jsonify(activity)
+    except Exception as e:
+        print(f"Error getting activity: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/guild/<guild_id>/settings', methods=['POST'])
+@login_required
+def update_settings(guild_id):
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Update settings
+        success = update_guild_settings(guild_id, data)
+        if not success:
+            return jsonify({'error': 'Failed to update settings'}), 500
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error updating settings: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/guild/<guild_id>/prefix', methods=['POST'])
 @login_required
@@ -195,12 +229,12 @@ def update_guild_prefix(guild_id):
         return jsonify({'error': 'Prefix must be 3 characters or less'}), 400
     
     # Update settings through bot connection
-    settings = bot_connection.get_guild_settings(guild_id)
+    settings = get_guild_settings(guild_id)
     settings['prefix'] = prefix
-    bot_connection.update_guild_settings(guild_id, settings)
+    update_guild_settings(guild_id, settings)
     
     # Notify bot about the change
-    asyncio.run(bot_connection.notify_bot(guild_id, 'prefix_update', {'prefix': prefix}))
+    asyncio.run(set_bot.notify_bot(guild_id, 'prefix_update', {'prefix': prefix}))
     
     return jsonify({'success': True})
 
@@ -211,12 +245,12 @@ def update_guild_cogs(guild_id):
     cogs = data.get('cogs', [])
     
     # Update settings through bot connection
-    settings = bot_connection.get_guild_settings(guild_id)
+    settings = get_guild_settings(guild_id)
     settings['cogs'] = cogs
-    bot_connection.update_guild_settings(guild_id, settings)
+    update_guild_settings(guild_id, settings)
     
     # Notify bot about the change
-    asyncio.run(bot_connection.notify_bot(guild_id, 'cogs_update', {'cogs': cogs}))
+    asyncio.run(set_bot.notify_bot(guild_id, 'cogs_update', {'cogs': cogs}))
     
     return jsonify({'success': True})
 
@@ -227,18 +261,18 @@ def update_log_channel(guild_id):
     channel_id = data.get('channel_id')
     
     # Update settings through bot connection
-    settings = bot_connection.get_guild_settings(guild_id)
+    settings = get_guild_settings(guild_id)
     settings['log_channel'] = channel_id
-    bot_connection.update_guild_settings(guild_id, settings)
+    update_guild_settings(guild_id, settings)
     
     # Notify bot about the change
-    asyncio.run(bot_connection.notify_bot(guild_id, 'log_channel_update', {'channel_id': channel_id}))
+    asyncio.run(set_bot.notify_bot(guild_id, 'log_channel_update', {'channel_id': channel_id}))
     
     return jsonify({'success': True})
 
 @app.route('/api/stats')
 def get_bot_stats():
-    settings = bot_connection.load_settings()
+    settings = get_guild_settings(None)
     total_servers = len(settings)
     total_users = sum(guild.get('member_count', 0) for guild in settings.values())
     total_commands = sum(guild.get('command_count', 0) for guild in settings.values())
@@ -265,7 +299,7 @@ def bot_update():
         return jsonify({'error': 'Missing required fields'}), 400
     
     # Add activity entry
-    bot_connection.add_activity(guild_id, {
+    set_bot.add_activity(guild_id, {
         'action': action,
         'data': action_data,
         'timestamp': str(datetime.datetime.utcnow())
