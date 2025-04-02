@@ -378,6 +378,7 @@ def get_bot_stats():
         total_servers = 0
         total_commands = 0
         total_mod_actions = 0
+        total_users = 0
         
         # Load all settings
         try:
@@ -389,6 +390,7 @@ def get_bot_stats():
                 for guild_id, settings in all_settings.items():
                     total_commands += settings.get('command_count', 0)
                     total_mod_actions += settings.get('mod_actions', 0)
+                    total_users += settings.get('member_count', 0)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.error(f"Error loading settings file: {e}")
             pass
@@ -396,7 +398,8 @@ def get_bot_stats():
         return jsonify({
             'servers': total_servers,
             'commands': total_commands,
-            'modActions': total_mod_actions
+            'modActions': total_mod_actions,
+            'users': total_users
         })
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
@@ -404,7 +407,8 @@ def get_bot_stats():
         return jsonify({
             'servers': 0,
             'commands': 0,
-            'modActions': 0
+            'modActions': 0,
+            'users': 0
         })
 
 @app.route('/logout')

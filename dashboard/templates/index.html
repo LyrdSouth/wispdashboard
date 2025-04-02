@@ -77,9 +77,9 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/stats')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('serverCount').textContent = data.servers;
-            document.getElementById('userCount').textContent = data.users;
-            document.getElementById('commandCount').textContent = data.commands;
+            document.getElementById('serverCount').textContent = data.servers || 0;
+            document.getElementById('userCount').textContent = data.users || 0;
+            document.getElementById('commandCount').textContent = data.commands || 0;
         })
         .catch(error => console.error('Error fetching stats:', error));
 
