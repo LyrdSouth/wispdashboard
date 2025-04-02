@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Select Server - WISP{% endblock %}
+
+{% block content %}
+<div class="server-select-container">
+    <div class="server-select-header">
+        <h1>Select a Server</h1>
+        <p>Choose a server to manage with WISP</p>
+    </div>
+    
+    <div class="server-grid" id="serverGrid">
+        <!-- Servers will be loaded here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const response = await fetch('/api/guilds');
+        const servers = await response.json();
+        
+        const serverGrid = document.getElementById('serverGrid');
+        
+        servers.forEach(server => {
+            const serverCard = document.createElement('div');
+            serverCard.className = 'server-card';
+            serverCard.innerHTML = `
+                <div class="server-icon">
+                    ${server.icon ? 
+                        `<img src="https://cdn.discordapp.com/icons/${server.id}/${server.icon}.png" alt="${server.name}">` :
+                        `<div class="server-icon-placeholder">${server.name.charAt(0)}</div>`
+                    }
+                </div>
+                <div class="server-info">
+                    <h3>${server.name}</h3>
+                    <p>${server.permissions & 0x20 ? 'Admin' : 'Manage'}</p>
+                </div>
+            `;
+            
+            serverCard.addEventListener('click', () => {
+                window.location.href = `/dashboard?guild_id=${server.id}`;
+            });
+            
+            serverGrid.appendChild(serverCard);
+        });
+    } catch (error) {
+        console.error('Error loading servers:', error);
+    }
+});
+</script>
+{% endblock %} 

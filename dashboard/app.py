@@ -89,12 +89,34 @@ def callback():
     session['user'] = user_data
     session['access_token'] = access_token
     
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('select_server'))
+
+@app.route('/select-server')
+@login_required
+def select_server():
+    return render_template('select_server.html')
 
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html', user=session['user'])
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return redirect(url_for('select_server'))
+    
+    # Check if user has access to this guild
+    headers = {
+        'Authorization': f'Bearer {session["access_token"]}'
+    }
+    
+    response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+    if response.status_code != 200:
+        return redirect(url_for('select_server'))
+    
+    guilds = response.json()
+    if not any(guild['id'] == guild_id for guild in guilds):
+        return redirect(url_for('select_server'))
+    
+    return render_template('dashboard.html', user=session['user'], guild_id=guild_id)
 
 @app.route('/api/guilds')
 @login_required
