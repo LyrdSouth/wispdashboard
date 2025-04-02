@@ -113,37 +113,46 @@
     async function loadServerSettings(guildId) {
         try {
             const response = await fetch(`/api/guild/${guildId}`);
-            const settings = await response.json();
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            
+            if (!data || !data.settings) {
+                console.error('Invalid server data:', data);
+                return;
+            }
+
+            settings = data.settings;
             
             // Update server info
-            document.getElementById('server-name').textContent = settings.name;
-            const iconUrl = settings.icon ? 
-                `https://cdn.discordapp.com/icons/${guildId}/${settings.icon}.png` : 
-                '/static/img/default-server.png';
-            document.getElementById('server-icon').src = iconUrl;
+            const serverName = document.getElementById('server-name');
+            const serverIcon = document.getElementById('server-icon');
+            if (serverName) serverName.textContent = data.name;
+            if (serverIcon && data.icon) serverIcon.src = data.icon;
             
             // Update prefix
-            document.getElementById('prefix-input').value = settings.prefix || '?';
+            const prefixInput = document.getElementById('prefix-input');
+            if (prefixInput && settings.prefix) {
+                prefixInput.value = settings.prefix;
+            }
             
-            // Update enabled cogs
-            if (settings.cogs && Array.isArray(settings.cogs)) {
+            // Update enabled features
+            if (settings.cogs) {
                 settings.cogs.forEach(cog => {
                     const checkbox = document.querySelector(`input[name="cog"][value="${cog}"]`);
                     if (checkbox) checkbox.checked = true;
                 });
             }
             
-            // Update log channel
-            const channelSelect = document.getElementById('channel-select');
-            channelSelect.value = settings.log_channel || '';
-            
-            // Load channels for log channel select
-            loadChannels(guildId);
+            // Load channels for log channel selection
+            await loadChannels(guildId);
             
             // Update stats
             updateStats(settings);
         } catch (error) {
             console.error('Error loading server settings:', error);
+            showNotification('Error loading server settings. Please try again.', 'error');
         }
     }
 
@@ -151,21 +160,35 @@
     async function loadChannels(guildId) {
         try {
             const response = await fetch(`/api/guild/${guildId}/channels`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const channels = await response.json();
             
-            const select = document.getElementById('channel-select');
-            select.innerHTML = '<option value="">Select a channel</option>';
+            if (!Array.isArray(channels)) {
+                console.error('Channels data is not an array:', channels);
+                return;
+            }
+
+            const channelSelect = document.getElementById('channel-select');
+            channelSelect.innerHTML = '<option value="">Select a channel</option>';
             
             channels.forEach(channel => {
                 if (channel.type === 0) { // Text channels only
                     const option = document.createElement('option');
                     option.value = channel.id;
-                    option.textContent = channel.name;
-                    select.appendChild(option);
+                    option.textContent = `#${channel.name}`;
+                    channelSelect.appendChild(option);
                 }
             });
+
+            // Set the selected channel if it exists in settings
+            if (settings && settings.log_channel) {
+                channelSelect.value = settings.log_channel;
+            }
         } catch (error) {
             console.error('Error loading channels:', error);
+            showNotification('Error loading channels. Please try again.', 'error');
         }
     }
 

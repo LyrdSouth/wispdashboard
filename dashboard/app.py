@@ -8,6 +8,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from bot_connection import bot_connection
 import asyncio
 import datetime
+import discord
 
 # Load environment variables
 load_dotenv()
@@ -137,43 +138,45 @@ def get_guilds():
 @app.route('/api/guild/<guild_id>')
 @login_required
 def get_guild(guild_id):
-    headers = {
-        'Authorization': f'Bearer {session["access_token"]}'
-    }
-    
-    response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
-    if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch guild data'}), 500
-    
-    guild_data = response.json()
-    
-    # Get custom settings from bot connection
-    guild_settings = bot_connection.get_guild_settings(guild_id)
-    
-    # Merge Discord data with custom settings
-    guild_data.update({
-        'prefix': guild_settings.get('prefix', '?'),
-        'cogs': guild_settings.get('cogs', ['moderation', 'utility', 'image']),
-        'log_channel': guild_settings.get('log_channel'),
-        'member_count': guild_data.get('approximate_member_count', 0),
-        'command_count': guild_settings.get('command_count', 0),
-        'mod_actions': guild_settings.get('mod_actions', 0)
-    })
-    
-    return jsonify(guild_data)
+    try:
+        guild = bot.get_guild(int(guild_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+            
+        return jsonify({
+            'id': str(guild.id),
+            'name': guild.name,
+            'icon': guild.icon.url if guild.icon else None,
+            'owner': str(guild.owner_id),
+            'member_count': guild.member_count,
+            'settings': bot_connection.get_guild_settings(str(guild.id))
+        })
+    except Exception as e:
+        print(f"Error getting guild: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/guild/<guild_id>/channels')
 @login_required
 def get_guild_channels(guild_id):
-    headers = {
-        'Authorization': f'Bearer {session["access_token"]}'
-    }
-    
-    response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}/channels', headers=headers)
-    if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch channels'}), 500
-    
-    return jsonify(response.json())
+    try:
+        guild = bot.get_guild(int(guild_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+            
+        channels = []
+        for channel in guild.channels:
+            if isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
+                channels.append({
+                    'id': str(channel.id),
+                    'name': channel.name,
+                    'type': str(channel.type),
+                    'position': channel.position
+                })
+        
+        return jsonify(channels)
+    except Exception as e:
+        print(f"Error getting channels: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/guild/<guild_id>/activity')
 @login_required
