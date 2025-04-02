@@ -51,7 +51,9 @@ class Bot(commands.Bot):
         
         # Try to get prefix from cache first
         if guild_id in self.settings_cache:
-            return self.settings_cache[guild_id].get('prefix', '?')
+            prefix = self.settings_cache[guild_id].get('prefix', '?')
+            print(f"Using cached prefix for guild {guild_id}: {prefix}")
+            return prefix
         
         # Try to load from dashboard settings
         try:
