@@ -240,17 +240,142 @@ def add_activity(guild_id: str, activity_data: Dict[str, Any]):
     except Exception as e:
         print(f"Error adding activity: {e}")
 
-# These functions are provided for compatibility with existing code
-# They don't actually connect to the bot anymore
+# This function is the key one for communicating with the remote bot on SillyDev
 def sync_with_bot(guild_id: str, settings: Dict[str, Any]) -> bool:
-    """For compatibility - just updates settings locally now"""
-    return update_guild_settings(guild_id, settings)
+    """Synchronize settings with the remote bot on SillyDev"""
+    try:
+        # Get config from environment variables with fallbacks
+        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
+        bot_token = os.getenv('DISCORD_TOKEN')
+        
+        headers = {
+            'Authorization': f'Bearer {bot_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Send settings to remote bot API
+        response = requests.post(
+            f"{bot_api_url}/settings/{guild_id}",
+            headers=headers,
+            json=settings,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"Successfully synced settings for guild {guild_id} with remote bot")
+            return True
+        else:
+            print(f"Failed to sync settings with remote bot: {response.status_code} - {response.text}")
+            return False
+    except requests.exceptions.ConnectTimeout:
+        print(f"Connection to remote bot API timed out after 10 seconds")
+        return False
+    except requests.exceptions.ConnectionError:
+        print(f"Could not connect to remote bot API at {bot_api_url}")
+        return False
+    except Exception as e:
+        print(f"Error syncing with remote bot: {e}")
+        return False
 
+# Get settings from remote bot directly
 def get_bot_settings(guild_id: str) -> Dict[str, Any]:
-    """For compatibility - just returns local settings now"""
-    return get_guild_settings(guild_id)
+    """Get settings directly from the remote bot"""
+    try:
+        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
+        bot_token = os.getenv('DISCORD_TOKEN')
+        
+        headers = {
+            'Authorization': f'Bearer {bot_token}'
+        }
+        
+        response = requests.get(
+            f"{bot_api_url}/settings/{guild_id}",
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Failed to get settings from remote bot: {response.status_code} - {response.text}")
+            return {}
+    except requests.exceptions.ConnectTimeout:
+        print(f"Connection to remote bot API timed out after 10 seconds")
+        return {}
+    except requests.exceptions.ConnectionError:
+        print(f"Could not connect to remote bot API at {bot_api_url}")
+        return {}
+    except Exception as e:
+        print(f"Error getting settings from remote bot: {e}")
+        return {}
 
 def get_bot_channels(guild_id: str) -> list:
-    """For compatibility - returns cached channels if available"""
-    settings = get_guild_settings(guild_id)
-    return settings.get('cached_channels', []) 
+    """Get channels directly from the remote bot"""
+    try:
+        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
+        bot_token = os.getenv('DISCORD_TOKEN')
+        
+        headers = {
+            'Authorization': f'Bearer {bot_token}'
+        }
+        
+        response = requests.get(
+            f"{bot_api_url}/channels/{guild_id}",
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            channels = response.json()
+            print(f"Got {len(channels)} channels from remote bot for guild {guild_id}")
+            
+            # Cache channels in local settings for backup
+            try:
+                settings = get_guild_settings(guild_id)
+                settings['cached_channels'] = channels
+                update_guild_settings(guild_id, settings)
+                print(f"Cached {len(channels)} channels for guild {guild_id}")
+            except Exception as e:
+                print(f"Error caching channels: {e}")
+            
+            return channels
+        else:
+            print(f"Failed to get channels from remote bot: {response.status_code} - {response.text}")
+            
+            # Fall back to cached channels
+            settings = get_guild_settings(guild_id)
+            if 'cached_channels' in settings:
+                print(f"Using {len(settings['cached_channels'])} cached channels for guild {guild_id}")
+                return settings['cached_channels']
+            
+            return []
+    except requests.exceptions.ConnectTimeout:
+        print(f"Connection to remote bot API timed out after 10 seconds")
+        
+        # Fall back to cached channels
+        settings = get_guild_settings(guild_id)
+        if 'cached_channels' in settings:
+            print(f"Using {len(settings['cached_channels'])} cached channels for guild {guild_id}")
+            return settings['cached_channels']
+        
+        return []
+    except requests.exceptions.ConnectionError:
+        print(f"Could not connect to remote bot API at {bot_api_url}")
+        
+        # Fall back to cached channels
+        settings = get_guild_settings(guild_id)
+        if 'cached_channels' in settings:
+            print(f"Using {len(settings['cached_channels'])} cached channels for guild {guild_id}")
+            return settings['cached_channels']
+        
+        return []
+    except Exception as e:
+        print(f"Error getting channels from remote bot: {e}")
+        
+        # Fall back to cached channels
+        settings = get_guild_settings(guild_id)
+        if 'cached_channels' in settings:
+            print(f"Using {len(settings['cached_channels'])} cached channels for guild {guild_id}")
+            return settings['cached_channels']
+        
+        return [] 

@@ -14,7 +14,8 @@ from bot_connection import (
     get_combined_guild_data, 
     store_guild_info, 
     get_file_path,
-    sync_with_bot
+    sync_with_bot,
+    get_bot_settings
 )
 import asyncio
 import datetime
@@ -308,7 +309,19 @@ def get_guilds():
 def get_guild(guild_id):
     logger.info(f"Getting guild {guild_id}")
     try:
-        # Get data from local storage first
+        # First try to get data from remote bot
+        remote_settings = {}
+        try:
+            remote_settings = get_bot_settings(guild_id)
+            if remote_settings:
+                logger.info(f"Got settings from remote bot for guild {guild_id}")
+                
+                # Save to local storage for future reference
+                update_guild_settings(guild_id, remote_settings)
+        except Exception as e:
+            logger.error(f"Error fetching settings from remote bot: {e}")
+        
+        # Fall back to local storage if needed
         result = get_combined_guild_data(guild_id)
         
         # Try to get guild information from Discord API to update our local data
@@ -476,13 +489,46 @@ def update_guild_prefix(guild_id):
         if len(prefix) > 3:
             return jsonify({'error': 'Prefix must be 3 characters or less'}), 400
         
-        # Get current settings
+        # Get current settings from our local storage
         settings = get_guild_settings(guild_id)
         
-        # Update prefix
+        # Update prefix locally
         settings['prefix'] = prefix
+        update_guild_settings(guild_id, settings)
         
-        # Add activity entry
+        # DIRECT CONNECTION TO BOT API ON SILLYDEV
+        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
+        bot_token = os.getenv('DISCORD_TOKEN')
+        
+        # Prepare data for bot API
+        bot_data = {
+            'prefix': prefix
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {bot_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            # Send API request to SillyDev bot
+            bot_response = requests.post(
+                f"{bot_api_url}/settings/{guild_id}", 
+                headers=headers,
+                json=bot_data,
+                timeout=10
+            )
+            
+            if bot_response.status_code == 200:
+                logger.info(f"Guild {guild_id} prefix updated to: {prefix} (synced with bot on SillyDev)")
+            else:
+                logger.warning(f"Failed to sync prefix with bot API: {bot_response.status_code} - {bot_response.text}")
+                # Still return success since we updated our local copy
+        except Exception as bot_error:
+            logger.error(f"Error connecting to bot API on SillyDev: {bot_error}")
+            # Continue even if bot sync fails - we'll try again next time
+            
+        # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()
         if 'activity' not in settings:
             settings['activity'] = []
@@ -493,16 +539,7 @@ def update_guild_prefix(guild_id):
             'data': {'prefix': prefix}
         })
         settings['activity'] = settings['activity'][:50]  # Keep only last 50
-        
-        # Save settings to bot directly
-        success = sync_with_bot(guild_id, settings)
-        
-        # If bot sync fails, try local update
-        if not success:
-            success = update_guild_settings(guild_id, settings)
-            
-        if not success:
-            return jsonify({'error': 'Failed to save prefix'}), 500
+        update_guild_settings(guild_id, settings)
             
         logger.info(f"Guild {guild_id} prefix updated to: {prefix}")
         return jsonify({'success': True, 'prefix': prefix})
@@ -518,13 +555,44 @@ def update_guild_cogs(guild_id):
         data = request.get_json()
         cogs = data.get('cogs', [])
         
-        # Get current settings
+        # Get current settings from local storage
         settings = get_guild_settings(guild_id)
         
-        # Update cogs
+        # Update cogs locally
         settings['cogs'] = cogs
+        update_guild_settings(guild_id, settings)
         
-        # Add activity entry
+        # DIRECT CONNECTION TO BOT API ON SILLYDEV
+        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
+        bot_token = os.getenv('DISCORD_TOKEN')
+        
+        # Prepare data for bot API
+        bot_data = {
+            'cogs': cogs
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {bot_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            # Send API request to SillyDev bot
+            bot_response = requests.post(
+                f"{bot_api_url}/settings/{guild_id}", 
+                headers=headers,
+                json=bot_data,
+                timeout=10
+            )
+            
+            if bot_response.status_code == 200:
+                logger.info(f"Guild {guild_id} cogs updated to: {cogs} (synced with bot on SillyDev)")
+            else:
+                logger.warning(f"Failed to sync cogs with bot API: {bot_response.status_code} - {bot_response.text}")
+        except Exception as bot_error:
+            logger.error(f"Error connecting to bot API on SillyDev: {bot_error}")
+        
+        # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()
         if 'activity' not in settings:
             settings['activity'] = []
@@ -535,16 +603,7 @@ def update_guild_cogs(guild_id):
             'data': {'cogs': cogs}
         })
         settings['activity'] = settings['activity'][:50]  # Keep only last 50
-        
-        # Save settings to bot directly
-        success = sync_with_bot(guild_id, settings)
-        
-        # If bot sync fails, try local update
-        if not success:
-            success = update_guild_settings(guild_id, settings)
-            
-        if not success:
-            return jsonify({'error': 'Failed to save features'}), 500
+        update_guild_settings(guild_id, settings)
             
         logger.info(f"Guild {guild_id} cogs updated to: {cogs}")
         return jsonify({'success': True, 'cogs': cogs})
@@ -560,13 +619,44 @@ def update_guild_log_channel(guild_id):
         data = request.get_json()
         channel_id = data.get('channel_id')
         
-        # Get current settings
+        # Get current settings from local storage
         settings = get_guild_settings(guild_id)
         
-        # Update log channel
+        # Update log channel locally
         settings['log_channel'] = channel_id
+        update_guild_settings(guild_id, settings)
         
-        # Add activity entry
+        # DIRECT CONNECTION TO BOT API ON SILLYDEV
+        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
+        bot_token = os.getenv('DISCORD_TOKEN')
+        
+        # Prepare data for bot API
+        bot_data = {
+            'log_channel': channel_id
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {bot_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            # Send API request to SillyDev bot
+            bot_response = requests.post(
+                f"{bot_api_url}/settings/{guild_id}", 
+                headers=headers,
+                json=bot_data,
+                timeout=10
+            )
+            
+            if bot_response.status_code == 200:
+                logger.info(f"Guild {guild_id} log channel updated to: {channel_id} (synced with bot on SillyDev)")
+            else:
+                logger.warning(f"Failed to sync log channel with bot API: {bot_response.status_code} - {bot_response.text}")
+        except Exception as bot_error:
+            logger.error(f"Error connecting to bot API on SillyDev: {bot_error}")
+        
+        # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()
         if 'activity' not in settings:
             settings['activity'] = []
@@ -577,16 +667,7 @@ def update_guild_log_channel(guild_id):
             'data': {'channel_id': channel_id}
         })
         settings['activity'] = settings['activity'][:50]  # Keep only last 50
-        
-        # Save settings to bot directly
-        success = sync_with_bot(guild_id, settings)
-        
-        # If bot sync fails, try local update
-        if not success:
-            success = update_guild_settings(guild_id, settings)
-            
-        if not success:
-            return jsonify({'error': 'Failed to save log channel'}), 500
+        update_guild_settings(guild_id, settings)
             
         logger.info(f"Guild {guild_id} log channel updated to: {channel_id}")
         return jsonify({'success': True, 'log_channel': channel_id})
