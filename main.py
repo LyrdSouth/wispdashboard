@@ -62,6 +62,7 @@ class Bot(commands.Bot):
                     if guild_id in all_settings and 'prefix' in all_settings[guild_id]:
                         prefix = all_settings[guild_id]['prefix']
                         self.settings_cache[guild_id] = {'prefix': prefix}
+                        print(f"Loaded prefix from dashboard for guild {guild_id}: {prefix}")
                         return prefix
         except Exception as e:
             print(f"Error loading prefix from dashboard: {e}")
@@ -72,7 +73,9 @@ class Bot(commands.Bot):
                 settings = get_guild_settings(guild_id)
                 self.settings_cache[guild_id] = settings
             
-            return self.settings_cache[guild_id].get('prefix', '?')
+            prefix = self.settings_cache[guild_id].get('prefix', '?')
+            print(f"Using prefix for guild {guild_id}: {prefix}")
+            return prefix
         except Exception as e:
             print(f"Error loading prefix: {e}")
             return '?'

@@ -497,6 +497,15 @@ def update_guild_prefix(guild_id):
         settings['prefix'] = prefix
         update_guild_settings(guild_id, settings)
         
+        # Update bot's prefix cache
+        try:
+            from main import bot
+            if hasattr(bot, 'settings_cache'):
+                bot.settings_cache[guild_id] = {'prefix': prefix}
+                print(f"Updated bot's prefix cache for guild {guild_id} to: {prefix}")
+        except Exception as e:
+            print(f"Error updating bot's prefix cache: {e}")
+        
         # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()
         if 'activity' not in settings:
