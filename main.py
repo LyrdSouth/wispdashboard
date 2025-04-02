@@ -66,6 +66,22 @@ EMBED_COLOR = discord.Color.from_rgb(187, 144, 252)  # Soft purple color
 # Settings management
 settings_cache = {}
 
+# Activity tracking
+activity_log = {}
+
+def log_activity(guild_id, action, data):
+    if guild_id not in activity_log:
+        activity_log[guild_id] = []
+    
+    activity_log[guild_id].append({
+        'timestamp': datetime.utcnow().isoformat(),
+        'action': action,
+        'data': data
+    })
+    
+    # Keep only last 50 activities
+    activity_log[guild_id] = activity_log[guild_id][-50:]
+
 # Initialize bot with both prefix and slash commands
 class Bot(commands.Bot):
     def __init__(self):
@@ -134,10 +150,28 @@ class Bot(commands.Bot):
         print(f"Logged in as {self.user.name} ({self.user.id})")
         await self.change_presence(activity=discord.Game(name="?help or /help"))
 
+        # Load cogs based on environment variables
+        for guild in self.guilds:
+            guild_id = str(guild.id)
+            cogs = os.getenv(f'COGS_{guild_id}', '').split(',')
+            for cog in cogs:
+                if cog:
+                    try:
+                        await self.load_extension(f'cogs.{cog}')
+                    except Exception as e:
+                        print(f"Error loading cog {cog} for guild {guild_id}: {e}")
+
     async def on_command(self, ctx):
         """Called when a command is invoked"""
         try:
             increment_command_count(str(ctx.guild.id))
+            # Log command usage
+            guild_id = str(ctx.guild.id)
+            log_activity(guild_id, 'command_used', {
+                'command': ctx.command.name,
+                'user': str(ctx.author),
+                'channel': str(ctx.channel)
+            })
         except Exception as e:
             print(f"Error in on_command: {e}")
 
