@@ -143,7 +143,33 @@ def dashboard():
     if not any(g['id'] == guild_id for g in guilds):
         return redirect(url_for('select_server'))
     
-    return render_template('dashboard.html', guild_id=guild_id)
+    # Get actual guild data to display in the template
+    try:
+        guild_response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
+        if guild_response.status_code == 200:
+            guild_data = guild_response.json()
+            guild_name = guild_data.get('name', 'Unknown Server')
+            guild_icon = guild_data.get('icon')
+            if guild_icon:
+                guild_icon_url = f'https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.png'
+            else:
+                guild_icon_url = '/static/img/default-server.png'
+        else:
+            guild_name = 'Unknown Server'
+            guild_icon_url = '/static/img/default-server.png'
+    except Exception as e:
+        logger.error(f"Error fetching guild data: {e}")
+        guild_name = 'Error Loading Server'
+        guild_icon_url = '/static/img/default-server.png'
+    
+    # Get current settings for this guild
+    settings = get_guild_settings(guild_id)
+    
+    return render_template('dashboard.html', 
+                           guild_id=guild_id,
+                           guild_name=guild_name,
+                           guild_icon_url=guild_icon_url,
+                           settings=settings)
 
 @app.route('/api/guilds')
 @login_required
@@ -293,83 +319,123 @@ def update_settings(guild_id):
 @app.route('/api/guild/<guild_id>/prefix', methods=['POST'])
 @login_required
 def update_guild_prefix(guild_id):
-    data = request.get_json()
-    prefix = data.get('prefix', '?')
-    
-    if len(prefix) > 3:
-        return jsonify({'error': 'Prefix must be 3 characters or less'}), 400
-    
-    # Update settings
-    settings = get_guild_settings(guild_id)
-    settings['prefix'] = prefix
-    
-    # Add activity entry
-    timestamp = datetime.datetime.now().isoformat()
-    if 'activity' not in settings:
-        settings['activity'] = []
-    
-    settings['activity'].insert(0, {
-        'timestamp': timestamp,
-        'action': 'prefix_update',
-        'data': {'prefix': prefix}
-    })
-    settings['activity'] = settings['activity'][:50]  # Keep only last 50
-    
-    update_guild_settings(guild_id, settings)
-    
-    return jsonify({'success': True})
+    try:
+        data = request.get_json()
+        prefix = data.get('prefix', '?')
+        
+        if len(prefix) > 3:
+            return jsonify({'error': 'Prefix must be 3 characters or less'}), 400
+        
+        # Get current settings
+        settings = get_guild_settings(guild_id)
+        
+        # Update prefix
+        settings['prefix'] = prefix
+        
+        # Add activity entry
+        timestamp = datetime.datetime.now().isoformat()
+        if 'activity' not in settings:
+            settings['activity'] = []
+        
+        settings['activity'].insert(0, {
+            'timestamp': timestamp,
+            'action': 'prefix_update',
+            'data': {'prefix': prefix}
+        })
+        settings['activity'] = settings['activity'][:50]  # Keep only last 50
+        
+        # Save settings
+        success = update_guild_settings(guild_id, settings)
+        
+        if not success:
+            return jsonify({'error': 'Failed to save prefix'}), 500
+            
+        logger.info(f"Guild {guild_id} prefix updated to: {prefix}")
+        return jsonify({'success': True, 'prefix': prefix})
+    except Exception as e:
+        logger.error(f"Error updating prefix: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/guild/<guild_id>/cogs', methods=['POST'])
 @login_required
 def update_guild_cogs(guild_id):
-    data = request.get_json()
-    cogs = data.get('cogs', [])
-    
-    # Update settings
-    settings = get_guild_settings(guild_id)
-    settings['cogs'] = cogs
-    
-    # Add activity entry
-    timestamp = datetime.datetime.now().isoformat()
-    if 'activity' not in settings:
-        settings['activity'] = []
-    
-    settings['activity'].insert(0, {
-        'timestamp': timestamp,
-        'action': 'cogs_update',
-        'data': {'cogs': cogs}
-    })
-    settings['activity'] = settings['activity'][:50]  # Keep only last 50
-    
-    update_guild_settings(guild_id, settings)
-    
-    return jsonify({'success': True})
+    try:
+        data = request.get_json()
+        cogs = data.get('cogs', [])
+        
+        # Validate cogs
+        valid_cogs = ['image', 'security']
+        cogs = [cog for cog in cogs if cog in valid_cogs]
+        
+        # Get current settings
+        settings = get_guild_settings(guild_id)
+        
+        # Update cogs
+        settings['cogs'] = cogs
+        
+        # Add activity entry
+        timestamp = datetime.datetime.now().isoformat()
+        if 'activity' not in settings:
+            settings['activity'] = []
+        
+        settings['activity'].insert(0, {
+            'timestamp': timestamp,
+            'action': 'cogs_update',
+            'data': {'cogs': cogs}
+        })
+        settings['activity'] = settings['activity'][:50]  # Keep only last 50
+        
+        # Save settings
+        success = update_guild_settings(guild_id, settings)
+        
+        if not success:
+            return jsonify({'error': 'Failed to save features'}), 500
+            
+        logger.info(f"Guild {guild_id} cogs updated: {cogs}")
+        return jsonify({'success': True, 'cogs': cogs})
+    except Exception as e:
+        logger.error(f"Error updating cogs: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/guild/<guild_id>/log-channel', methods=['POST'])
 @login_required
 def update_log_channel(guild_id):
-    data = request.get_json()
-    channel_id = data.get('channel_id')
-    
-    # Update settings
-    settings = get_guild_settings(guild_id)
-    settings['log_channel'] = channel_id
-    
-    # Add activity entry
-    timestamp = datetime.datetime.now().isoformat()
-    if 'activity' not in settings:
-        settings['activity'] = []
-    
-    settings['activity'].insert(0, {
-        'timestamp': timestamp,
-        'action': 'log_channel_update',
-        'data': {'channel_id': channel_id}
-    })
-    settings['activity'] = settings['activity'][:50]  # Keep only last 50
-    
-    update_guild_settings(guild_id, settings)
-    
-    return jsonify({'success': True})
+    try:
+        data = request.get_json()
+        channel_id = data.get('channel_id')
+        
+        # Get current settings
+        settings = get_guild_settings(guild_id)
+        
+        # Update log channel
+        settings['log_channel'] = channel_id
+        
+        # Add activity entry
+        timestamp = datetime.datetime.now().isoformat()
+        if 'activity' not in settings:
+            settings['activity'] = []
+        
+        settings['activity'].insert(0, {
+            'timestamp': timestamp,
+            'action': 'log_channel_update',
+            'data': {'channel_id': channel_id}
+        })
+        settings['activity'] = settings['activity'][:50]  # Keep only last 50
+        
+        # Save settings
+        success = update_guild_settings(guild_id, settings)
+        
+        if not success:
+            return jsonify({'error': 'Failed to save log channel'}), 500
+            
+        logger.info(f"Guild {guild_id} log channel updated to: {channel_id}")
+        return jsonify({'success': True, 'channel_id': channel_id})
+    except Exception as e:
+        logger.error(f"Error updating log channel: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stats')
 def get_bot_stats():

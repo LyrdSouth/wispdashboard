@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - WISP Bot{% endblock %}
+{% block title %}Dashboard - {{ guild_name }}{% endblock %}
 
 {% block content %}
 <div class="dashboard-header">
     <h1>Dashboard</h1>
     <div class="server-info">
-        <img id="server-icon" src="" alt="Server Icon" class="server-icon">
-        <h2 id="server-name">Loading...</h2>
+        <img id="server-icon" src="{{ guild_icon_url }}" alt="{{ guild_name }}" class="server-icon">
+        <h2 id="server-name">{{ guild_name }}</h2>
     </div>
 </div>
 
@@ -17,21 +17,21 @@
         <div class="stat-card">
             <i class="fas fa-users"></i>
             <div class="stat-info">
-                <span class="stat-value" id="member-count">-</span>
+                <span class="stat-value" id="member-count">{{ settings.member_count|default('-', true) }}</span>
                 <span class="stat-label">Members</span>
             </div>
         </div>
         <div class="stat-card">
             <i class="fas fa-terminal"></i>
             <div class="stat-info">
-                <span class="stat-value" id="command-count">-</span>
+                <span class="stat-value" id="command-count">{{ settings.command_count|default('-', true) }}</span>
                 <span class="stat-label">Commands Used</span>
             </div>
         </div>
         <div class="stat-card">
             <i class="fas fa-shield-alt"></i>
             <div class="stat-info">
-                <span class="stat-value" id="mod-actions">-</span>
+                <span class="stat-value" id="mod-actions">{{ settings.mod_actions|default('-', true) }}</span>
                 <span class="stat-label">Mod Actions</span>
             </div>
         </div>
@@ -46,39 +46,27 @@
                 <h3>Command Prefix</h3>
                 <form id="prefix-form" class="setting-form">
                     <div class="form-group">
-                        <input type="text" id="prefix-input" placeholder="Enter prefix (max 3 chars)">
+                        <input type="text" id="prefix" name="prefix" maxlength="3" value="{{ settings.prefix|default('?', true) }}" placeholder="Enter prefix (max 3 chars)">
                         <button type="submit" class="btn btn-primary">Update</button>
                     </div>
                 </form>
             </div>
 
-            <!-- Enabled Features -->
+            <!-- Features/Cogs -->
             <div class="setting-card">
                 <h3>Enabled Features</h3>
                 <form id="cogs-form" class="setting-form">
                     <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" name="cog" value="moderation">
-                            <span class="checkmark"></span>
-                            Moderation
-                        </label>
-                        <label class="checkbox-container">
-                            <input type="checkbox" name="cog" value="utility">
-                            <span class="checkmark"></span>
-                            Utility
-                        </label>
-                        <label class="checkbox-container">
-                            <input type="checkbox" name="cog" value="image">
-                            <span class="checkmark"></span>
-                            Image Commands
-                        </label>
-                        <label class="checkbox-container">
-                            <input type="checkbox" name="cog" value="security">
-                            <span class="checkmark"></span>
-                            Security
-                        </label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="cogs" value="image" {% if 'image' in settings.cogs|default([], true) %}checked{% endif %}> Image Commands
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="cogs" value="security" {% if 'security' in settings.cogs|default([], true) %}checked{% endif %}> Security Features
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Features</button>
                     </div>
-                    <button type="submit" class="btn btn-primary">Update Features</button>
                 </form>
             </div>
 
@@ -87,278 +75,249 @@
                 <h3>Log Channel</h3>
                 <form id="log-channel-form" class="setting-form">
                     <div class="form-group">
-                        <select id="channel-select" class="channel-select">
+                        <select id="log-channel" name="channel">
                             <option value="">Select a channel</option>
+                            <!-- Channels will be loaded via JavaScript -->
                         </select>
+                        <button type="submit" class="btn btn-primary">Save Channel</button>
                     </div>
-                    <button type="submit" class="btn btn-primary">Update Channel</button>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Recent Activity -->
-    <div class="activity-section">
-        <h2>Recent Activity</h2>
-        <div class="activity-list" id="activity-list">
-            <div class="loading">Loading activity...</div>
-        </div>
-    </div>
+    <!-- Notification container -->
+    <div id="notification-container"></div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 <script>
-    // Load server settings
-    async function loadServerSettings(guildId) {
-        try {
-            const response = await fetch(`/api/guild/${guildId}`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch server info: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            // Update server info in UI
-            const serverName = document.getElementById('server-name');
-            const serverIcon = document.getElementById('server-icon');
-            if (serverName) serverName.textContent = data.name || 'Unknown Server';
-            if (serverIcon && data.icon) {
-                serverIcon.src = `https://cdn.discordapp.com/icons/${data.id}/${data.icon}.png`;
-            } else {
-                serverIcon.src = '/static/img/default-server.png';
-            }
-            
-            // Enable buttons and forms now that data is loaded
-            document.querySelectorAll('.settings-form').forEach(form => {
-                form.classList.remove('disabled');
-            });
-            
-            // Show success message
-            showNotification('Server info loaded successfully', 'success');
-            
-            // Update prefix
-            const prefixInput = document.getElementById('prefix-input');
-            if (prefixInput && data.settings && data.settings.prefix) {
-                prefixInput.value = data.settings.prefix;
-            }
-            
-            // Update enabled features
-            if (data.settings && data.settings.cogs) {
-                const cogsForm = document.getElementById('cogs-form');
-                const cogs = data.settings.cogs;
-                cogs.forEach(cog => {
-                    const checkbox = cogsForm.querySelector(`input[name="cog"][value="${cog}"]`);
-                    if (checkbox) checkbox.checked = true;
-                });
-            }
-            
-            // Load channels for log channel selection
-            await loadChannels(guildId);
-            
-            // Update stats
-            updateStats(data.settings);
-        } catch (error) {
-            console.error('Error loading server settings:', error);
-            showNotification('Failed to load server settings: ' + error.message, 'error');
-            
-            // Show default/fallback UI
-            document.getElementById('server-name').textContent = 'Error Loading Server';
-            document.getElementById('server-icon').src = '/static/img/default-server.png';
+// Get parameters from server-side
+const guildId = "{{ guild_id }}";
+let serverSettings = {{ settings|tojson|safe }};
+
+// Load all necessary data when page loads
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        // Add notification container if it doesn't exist
+        if (!document.getElementById('notification-container')) {
+            const container = document.createElement('div');
+            container.id = 'notification-container';
+            container.style.position = 'fixed';
+            container.style.top = '20px';
+            container.style.right = '20px';
+            container.style.zIndex = '1000';
+            document.body.appendChild(container);
         }
-    }
 
-    // Load server channels
-    async function loadChannels(guildId) {
-        try {
-            const response = await fetch(`/api/guild/${guildId}/channels`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch channels: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            // Verify data is an array
-            if (!Array.isArray(data)) {
-                console.error('Channels data is not an array:', data);
-                throw new Error('Invalid channel data format');
-            }
-            
-            // Sort channels by position
-            const sortedChannels = [...data].sort((a, b) => a.position - b.position);
-            
-            // Populate channel dropdown
-            const channelSelect = document.getElementById('channel-select');
-            channelSelect.innerHTML = '<option value="">Select a channel</option>';
-            
-            sortedChannels.forEach(channel => {
-                if (channel.type === 0) { // Text channels only
-                    const option = document.createElement('option');
-                    option.value = channel.id;
-                    option.textContent = `#${channel.name}`;
-                    channelSelect.appendChild(option);
-                }
-            });
-
-            // Set the selected channel if it exists in settings
-            if (data.settings && data.settings.log_channel) {
-                channelSelect.value = data.settings.log_channel;
-            }
-        } catch (error) {
-            console.error('Error loading channels:', error);
-            showNotification('Failed to load channels: ' + error.message, 'error');
-            
-            // Clear dropdown with just the default option
-            const channelSelect = document.getElementById('channel-select');
-            channelSelect.innerHTML = '<option value="">No channels available</option>';
-        }
-    }
-
-    // Update server stats
-    function updateStats(settings) {
-        document.getElementById('member-count').textContent = settings.member_count || '-';
-        document.getElementById('command-count').textContent = settings.command_count || '-';
-        document.getElementById('mod-actions').textContent = settings.mod_actions || '-';
-    }
-
-    // Load recent activity
-    async function loadActivity(guildId) {
-        try {
-            const response = await fetch(`/api/guild/${guildId}/activity`);
-            const activities = await response.json();
-            
-            const activityList = document.getElementById('activity-list');
-            activityList.innerHTML = '';
-            
-            activities.forEach(activity => {
-                const activityItem = document.createElement('div');
-                activityItem.className = 'activity-item';
-                activityItem.innerHTML = `
-                    <div class="activity-icon">
-                        <i class="fas ${getActivityIcon(activity.type)}"></i>
-                    </div>
-                    <div class="activity-details">
-                        <span class="activity-text">${activity.description}</span>
-                        <span class="activity-time">${formatTime(activity.timestamp)}</span>
-                    </div>
-                `;
-                activityList.appendChild(activityItem);
-            });
-        } catch (error) {
-            console.error('Error loading activity:', error);
-        }
-    }
-
-    // Get icon for activity type
-    function getActivityIcon(type) {
-        const icons = {
-            'ban': 'fa-ban',
-            'kick': 'fa-boot',
-            'timeout': 'fa-clock',
-            'prefix': 'fa-terminal',
-            'cog': 'fa-cog'
-        };
-        return icons[type] || 'fa-info-circle';
-    }
-
-    // Format timestamp
-    function formatTime(timestamp) {
-        return new Date(timestamp).toLocaleString();
-    }
-
-    // Event Listeners
-    document.addEventListener('DOMContentLoaded', () => {
-        // Get guild_id from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const guildId = urlParams.get('guild_id');
+        // Load channels (server info and settings are already loaded from template)
+        await loadChannels();
         
-        if (guildId) {
-            loadServerSettings(guildId);
-            loadActivity(guildId);
-        } else {
-            window.location.href = '/select-server';
+        // Set log channel if it exists (needs to be after channels are loaded)
+        const logChannelId = serverSettings.log_channel;
+        if (logChannelId) {
+            const logChannelSelect = document.getElementById('log-channel');
+            setTimeout(() => {
+                logChannelSelect.value = logChannelId;
+            }, 500); // Small delay to ensure channels are loaded
+        }
+
+        // Set up form submission handlers
+        document.getElementById('prefix-form').addEventListener('submit', updatePrefix);
+        document.getElementById('cogs-form').addEventListener('submit', updateCogs);
+        document.getElementById('log-channel-form').addEventListener('submit', updateLogChannel);
+        
+        // Show success message after loading
+        showNotification('Dashboard loaded successfully', 'success');
+    } catch (error) {
+        console.error('Error initializing dashboard:', error);
+        showNotification('Error initializing dashboard: ' + error.message, 'error');
+    }
+});
+
+// Load server channels
+async function loadChannels() {
+    try {
+        const response = await fetch(`/api/guild/${guildId}/channels`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch channels: ${response.status}`);
         }
         
-        // Form submissions
-        document.getElementById('prefix-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const prefix = document.getElementById('prefix-input').value;
-            const guildId = new URLSearchParams(window.location.search).get('guild_id');
-            
-            try {
-                await fetch(`/api/guild/${guildId}/prefix`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prefix })
-                });
-                showNotification('Prefix updated successfully!', 'success');
-            } catch (error) {
-                showNotification('Failed to update prefix', 'error');
-            }
+        const channels = await response.json();
+        
+        // Verify channels is an array
+        if (!Array.isArray(channels)) {
+            console.error('Channels data is not an array:', channels);
+            throw new Error('Invalid channel data format');
+        }
+        
+        // Sort channels by position
+        const sortedChannels = [...channels].sort((a, b) => a.position - b.position);
+        
+        // Populate channel dropdown
+        const channelSelect = document.getElementById('log-channel');
+        channelSelect.innerHTML = '<option value="">Select a channel</option>';
+        
+        sortedChannels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = '#' + channel.name;
+            channelSelect.appendChild(option);
         });
         
-        document.getElementById('cogs-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const guildId = new URLSearchParams(window.location.search).get('guild_id');
-            const cogs = Array.from(document.querySelectorAll('input[name="cog"]:checked'))
-                .map(checkbox => checkbox.value);
-            
-            try {
-                await fetch(`/api/guild/${guildId}/cogs`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cogs })
-                });
-                showNotification('Features updated successfully!', 'success');
-            } catch (error) {
-                showNotification('Failed to update features', 'error');
-            }
-        });
-        
-        document.getElementById('log-channel-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const guildId = new URLSearchParams(window.location.search).get('guild_id');
-            const channelId = document.getElementById('channel-select').value;
-            
-            try {
-                await fetch(`/api/guild/${guildId}/log-channel`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ channel_id: channelId })
-                });
-                showNotification('Log channel updated successfully!', 'success');
-            } catch (error) {
-                showNotification('Failed to update log channel', 'error');
-            }
-        });
-    });
-
-    // Show notification
-    function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        
-        const container = document.getElementById('notification-container');
-        if (!container) {
-            // Create container if it doesn't exist
-            const newContainer = document.createElement('div');
-            newContainer.id = 'notification-container';
-            newContainer.style.position = 'fixed';
-            newContainer.style.top = '20px';
-            newContainer.style.right = '20px';
-            newContainer.style.zIndex = '1000';
-            document.body.appendChild(newContainer);
-            newContainer.appendChild(notification);
-        } else {
-            container.appendChild(notification);
+        // Set the selected channel if it exists in settings
+        if (serverSettings.log_channel) {
+            channelSelect.value = serverSettings.log_channel;
         }
         
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 500);
-        }, 5000);
+        return channels;
+    } catch (error) {
+        console.error('Error loading channels:', error);
+        showNotification('Failed to load channels: ' + error.message, 'error');
+        
+        // Clear dropdown with just the default option
+        const channelSelect = document.getElementById('log-channel');
+        channelSelect.innerHTML = '<option value="">No channels available</option>';
+        return [];
     }
+}
+
+// Update prefix
+async function updatePrefix(event) {
+    event.preventDefault();
+    const prefix = document.getElementById('prefix').value;
+    
+    try {
+        const response = await fetch(`/api/guild/${guildId}/prefix`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ prefix })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update prefix');
+        }
+        
+        const result = await response.json();
+        showNotification(`Prefix updated to: ${prefix}`, 'success');
+        serverSettings.prefix = prefix;
+    } catch (error) {
+        console.error('Error updating prefix:', error);
+        showNotification('Failed to update prefix: ' + error.message, 'error');
+    }
+}
+
+// Update cogs/features
+async function updateCogs(event) {
+    event.preventDefault();
+    
+    const checkboxes = document.querySelectorAll('input[name="cogs"]:checked');
+    const cogs = Array.from(checkboxes).map(cb => cb.value);
+    
+    try {
+        const response = await fetch(`/api/guild/${guildId}/cogs`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ cogs })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update features');
+        }
+        
+        const result = await response.json();
+        showNotification('Enabled features updated', 'success');
+        serverSettings.cogs = cogs;
+    } catch (error) {
+        console.error('Error updating cogs:', error);
+        showNotification('Failed to update features: ' + error.message, 'error');
+    }
+}
+
+// Update log channel
+async function updateLogChannel(event) {
+    event.preventDefault();
+    
+    const channelId = document.getElementById('log-channel').value;
+    
+    try {
+        const response = await fetch(`/api/guild/${guildId}/log-channel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ channel_id: channelId })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update log channel');
+        }
+        
+        const result = await response.json();
+        showNotification('Log channel updated', 'success');
+        serverSettings.log_channel = channelId;
+    } catch (error) {
+        console.error('Error updating log channel:', error);
+        showNotification('Failed to update log channel: ' + error.message, 'error');
+    }
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    
+    const container = document.getElementById('notification-container');
+    container.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.add('fade-out');
+        setTimeout(() => notification.remove(), 500);
+    }, 5000);
+}
+
+// Add styles for notifications if not already in dashboard.css
+const notificationStyles = `
+.notification {
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    color: white;
+    max-width: 300px;
+    transition: opacity 0.5s ease;
+}
+.notification.success {
+    background-color: #4CAF50;
+}
+.notification.error {
+    background-color: #F44336;
+}
+.notification.info {
+    background-color: #2196F3;
+}
+.notification.fade-out {
+    opacity: 0;
+}
+`;
+
+// Add the styles if not already present
+if (!document.getElementById('notification-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'notification-styles';
+    styleEl.textContent = notificationStyles;
+    document.head.appendChild(styleEl);
+}
 </script>
 {% endblock %} 
