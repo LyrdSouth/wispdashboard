@@ -147,11 +147,12 @@ class Bot(commands.Bot):
                 print(f"Failed to load extension {ext}: {e}")
 
         # Load all cogs initially
-        for filename in os.listdir('./cogs'):
-            if filename.endswith('.py'):
+        for filename in os.listdir('.'):
+            if filename.endswith('.py') and filename not in ['main.py', 'app.py']:
                 try:
-                    await self.load_extension(f'cogs.{filename[:-3]}')
-                    print(f'Loaded cog: {filename[:-3]}')
+                    cog_name = filename[:-3]  # Remove .py extension
+                    await self.load_extension(cog_name)
+                    print(f'Loaded cog: {cog_name}')
                 except Exception as e:
                     print(f'Failed to load cog {filename}: {e}')
 
@@ -160,17 +161,18 @@ class Bot(commands.Bot):
         print(f"Logged in as {self.user.name} ({self.user.id})")
         await self.change_presence(activity=discord.Game(name="?help or /help"))
 
-        # Load cogs based on environment variables
+        # Update disabled cogs for each guild
         for guild in self.guilds:
             guild_id = str(guild.id)
-            cogs = os.getenv(f'COGS_{guild_id}', '').split(',')
+            enabled_cogs = os.getenv(f'COGS_{guild_id}', '').split(',')
             self.disabled_cogs[guild_id] = []
-            for cog in cogs:
-                if cog:
-                    try:
-                        await self.load_extension(f'cogs.{cog}')
-                    except Exception as e:
-                        print(f"Error loading cog {cog} for guild {guild_id}: {e}")
+            
+            # Check all potential cogs
+            for filename in os.listdir('.'):
+                if filename.endswith('.py') and filename not in ['main.py', 'app.py']:
+                    cog_name = filename[:-3].lower()
+                    if cog_name not in enabled_cogs and cog_name:
+                        self.disabled_cogs[guild_id].append(cog_name)
 
     async def on_command(self, ctx):
         """Called when a command is invoked"""
