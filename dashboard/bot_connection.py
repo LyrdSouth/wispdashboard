@@ -237,15 +237,33 @@ def get_mod_action_count(guild_id):
 def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
     """Update settings for a specific guild"""
     try:
+        # Store the last update time
+        settings['last_updated'] = datetime.now().isoformat()
+        
+        # Make sure we preserve any server info we have
+        if 'name' not in settings and guild_id in settings_cache and 'name' in settings_cache[guild_id]:
+            settings['name'] = settings_cache[guild_id]['name']
+        
+        if 'icon' not in settings and guild_id in settings_cache and 'icon' in settings_cache[guild_id]:
+            settings['icon'] = settings_cache[guild_id]['icon']
+            
+        if 'member_count' not in settings and guild_id in settings_cache and 'member_count' in settings_cache[guild_id]:
+            settings['member_count'] = settings_cache[guild_id]['member_count']
+        
         # Update cache
         settings_cache[guild_id] = settings.copy()
         
         # Try to sync with bot first
-        if sync_with_bot(guild_id, settings):
-            return True
+        try:
+            sync_result = sync_with_bot(guild_id, settings)
+            if sync_result:
+                print(f"Successfully synced settings with bot for guild {guild_id}")
+                # Still save locally as backup
+        except Exception as e:
+            print(f"Error trying to sync with bot: {e}")
+            # Continue to save locally
             
-        # Fall back to local file if bot sync fails
-        # Save to local file as backup
+        # Save to local file as backup or primary storage
         try:
             settings_file = get_file_path('settings.json')
             with open(settings_file, 'r') as f:
@@ -261,10 +279,64 @@ def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
         with open(settings_file, 'w') as f:
             json.dump(all_settings, f, indent=4)
         
+        print(f"Successfully saved settings for guild {guild_id}")
         return True
     except Exception as e:
-        print(f"Error updating settings: {e}")
+        print(f"Error updating guild settings: {e}")
         return False
+
+# Store guild info received from Discord in our settings
+def store_guild_info(guild_id: str, guild_data: Dict[str, Any]) -> None:
+    """Store guild information from Discord API in our settings"""
+    try:
+        # Get current settings
+        settings = get_guild_settings(guild_id)
+        
+        # Update with guild data
+        if 'name' in guild_data:
+            settings['name'] = guild_data['name']
+        
+        if 'icon' in guild_data:
+            settings['icon'] = guild_data['icon']
+            
+        if 'owner_id' in guild_data:
+            settings['owner_id'] = guild_data['owner_id']
+            
+        if 'approximate_member_count' in guild_data:
+            settings['member_count'] = guild_data['approximate_member_count']
+        elif 'member_count' in guild_data:
+            settings['member_count'] = guild_data['member_count']
+        
+        # Save the updated settings
+        update_guild_settings(guild_id, settings)
+        
+        print(f"Successfully stored guild info for {guild_id}: {settings.get('name', 'Unknown')}")
+    except Exception as e:
+        print(f"Error storing guild info: {e}")
+
+# Get bot and guild data combined
+def get_combined_guild_data(guild_id: str) -> Dict[str, Any]:
+    """Get combined bot settings and guild data"""
+    settings = get_guild_settings(guild_id)
+    
+    # Build a response with settings and any stored guild info
+    result = {
+        'id': guild_id,
+        'name': settings.get('name', 'Unknown Server'),
+        'icon': settings.get('icon'),
+        'owner_id': settings.get('owner_id'),
+        'member_count': settings.get('member_count', 0),
+        'settings': {
+            'prefix': settings.get('prefix', '?'),
+            'cogs': settings.get('cogs', ['image', 'security']),
+            'command_count': settings.get('command_count', 0),
+            'mod_actions': settings.get('mod_actions', 0),
+            'log_channel': settings.get('log_channel'),
+            'activity': settings.get('activity', [])
+        }
+    }
+    
+    return result
 
 def increment_command_count(guild_id: str):
     """Increment command count for a specific guild"""

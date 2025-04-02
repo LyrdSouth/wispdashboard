@@ -65,7 +65,21 @@ def get_redirect_uri():
 
 @app.route('/login')
 def login():
-    return redirect(f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify%20guilds')
+    # Additional OAuth scopes to get better access to guilds and their data
+    oauth_scopes = [
+        'identify',      # Get user info
+        'guilds',        # List user's guilds
+        'guilds.members.read'  # Read guild members
+    ]
+    
+    scopes_param = '%20'.join(oauth_scopes)
+    redirect_uri = DISCORD_REDIRECT_URI
+    
+    # Build the full OAuth URL with all required scopes
+    oauth_url = f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope={scopes_param}'
+    
+    logger.info(f"Redirecting to Discord OAuth: {oauth_url}")
+    return redirect(oauth_url)
 
 @app.route('/callback')
 def callback():
@@ -332,123 +346,52 @@ def get_guilds():
 def get_guild(guild_id):
     logger.info(f"Getting guild {guild_id}")
     try:
-        # Get guild settings from bot first
-        try:
-            logger.debug(f"Fetching settings for guild {guild_id} from bot")
-            settings = get_bot_settings(guild_id)
-            if not settings:
-                # Fall back to local settings if bot is unavailable
-                logger.debug(f"Bot API unavailable, using local settings")
-                settings = get_guild_settings(guild_id)
-            logger.debug(f"Got settings: {settings}")
-        except Exception as settings_error:
-            logger.error(f"Error getting guild settings: {settings_error}")
-            logger.error(traceback.format_exc())
-            settings = get_guild_settings(guild_id)  # Try local settings on error
-            logger.debug(f"Using local settings: {settings}")
+        # Try to get guild information from Discord API first with extended permissions
+        headers = {
+            'Authorization': f'Bearer {session["access_token"]}'
+        }
         
-        # Get guild info from Discord
+        # Try different Discord API endpoints to get the most data
+        logger.debug(f"Fetching guild data from Discord API")
+        
+        guild_data = None
+        
+        # Try the /users/@me/guilds endpoint first
         try:
-            headers = {
-                'Authorization': f'Bearer {session["access_token"]}'
-            }
-            
-            logger.debug(f"Fetching guild data from Discord API")
-            response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
-            logger.debug(f"Discord API response status: {response.status_code}")
-            
-            if response.status_code == 401:
-                logger.warning("Discord token is unauthorized (401). Token may have expired.")
-                # Optional: you could redirect to re-auth here with:
-                # return jsonify({'error': 'Session expired', 'redirect': '/login'}), 401
-                # Instead, we'll use fallback data
-                
-            if response.status_code != 200:
-                logger.warning(f"Failed to fetch guild from Discord API: {response.status_code}")
-                # Try to get guild info from bot API as fallback
-                try:
-                    logger.debug("Trying to get guild info from bot API")
-                    bot_headers = {
-                        'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
-                    }
-                    bot_response = requests.get(f'http://45.90.13.151:6150/api/guilds', 
-                                             headers=bot_headers, 
-                                             timeout=10)
-                    
-                    if bot_response.status_code == 200:
-                        bot_guilds = bot_response.json()
-                        matching_guild = next((g for g in bot_guilds if g['id'] == guild_id), None)
-                        
-                        if matching_guild:
-                            logger.info(f"Got guild info from bot API: {matching_guild['name']}")
-                            return jsonify({
-                                'id': guild_id,
-                                'name': matching_guild.get('name', 'Unknown Server'),
-                                'icon': matching_guild.get('icon'),
-                                'owner_id': matching_guild.get('owner_id'),
-                                'member_count': matching_guild.get('member_count', 0),
-                                'settings': settings
-                            })
-                except Exception as bot_api_error:
-                    logger.error(f"Error getting guild info from bot API: {bot_api_error}")
-                
-                # If all else fails, use the settings name if available
-                if settings and settings.get('name'):
-                    return jsonify({
-                        'id': guild_id,
-                        'name': settings.get('name', 'Unknown Server'),
-                        'icon': settings.get('icon'),
-                        'owner_id': settings.get('owner_id'),
-                        'member_count': settings.get('member_count', 0),
-                        'settings': settings
-                    })
-                else:
-                    return jsonify({
-                        'id': guild_id,
-                        'name': 'Unknown Server',
-                        'icon': None,
-                        'settings': settings
-                    })
-            
-            guild_data = response.json()
-            logger.debug(f"Got guild data: {guild_data}")
-            
-            # Merge Discord data with settings
-            result = {
-                'id': guild_data.get('id', guild_id),
-                'name': guild_data.get('name', 'Unknown Server'),
-                'icon': guild_data.get('icon'),
-                'owner_id': guild_data.get('owner_id'),
-                'member_count': guild_data.get('approximate_member_count', 0),
-                'settings': settings
-            }
-            
-            logger.info(f"Successfully built guild response for {guild_id}")
-            return jsonify(result)
-        except Exception as discord_error:
-            logger.error(f"Error getting Discord guild data: {discord_error}")
-            logger.error(traceback.format_exc())
-            return jsonify({
-                'id': guild_id,
-                'name': 'Error Loading Server',
-                'icon': None,
-                'settings': settings
-            })
+            guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+            if guilds_response.status_code == 200:
+                user_guilds = guilds_response.json()
+                # Find the specific guild in the user's guilds
+                matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
+                if matching_guild:
+                    logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
+                    guild_data = matching_guild
+                    # Store this info for future use
+                    store_guild_info(guild_id, matching_guild)
+        except Exception as e:
+            logger.error(f"Error getting user guilds: {e}")
+        
+        # If we couldn't get it from /users/@me/guilds, try direct guild endpoint
+        if not guild_data:
+            try:
+                direct_response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
+                if direct_response.status_code == 200:
+                    guild_data = direct_response.json()
+                    logger.info(f"Got guild data directly: {guild_data['name']}")
+                    # Store this info for future use
+                    store_guild_info(guild_id, guild_data)
+            except Exception as e:
+                logger.error(f"Error getting guild directly: {e}")
+        
+        # Get combined data with any info we've stored plus settings
+        result = get_combined_guild_data(guild_id)
+        
+        logger.info(f"Returning guild data: {result['name']}")
+        return jsonify(result)
     except Exception as e:
         logger.error(f"Unhandled error in get_guild: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({
-            'id': guild_id,
-            'name': 'Error',
-            'icon': None,
-            'settings': {
-                'prefix': '?',
-                'cogs': ['image', 'security'],
-                'command_count': 0,
-                'mod_actions': 0,
-                'activity': []
-            }
-        })
+        return jsonify(get_combined_guild_data(guild_id))
 
 @app.route('/api/guild/<guild_id>/channels')
 @login_required
