@@ -121,7 +121,11 @@ def select_server():
         return redirect(url_for('login'))
     
     guilds = response.json()
-    return render_template('select_server.html', guilds=guilds)
+    
+    # Pass bot token securely to the template for direct API calls if needed
+    bot_token = os.getenv('DISCORD_TOKEN')
+    
+    return render_template('select_server.html', guilds=guilds, bot_token=bot_token)
 
 @app.route('/dashboard')
 @login_required
@@ -143,7 +147,46 @@ def dashboard():
     if not any(g['id'] == guild_id for g in guilds):
         return redirect(url_for('select_server'))
     
-    # Get actual guild data to display in the template
+    # Try to get guild data from bot first
+    try:
+        # Make a direct request to the bot API for this guild
+        bot_headers = {
+            'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
+        }
+        
+        bot_response = requests.get(f'http://45.90.13.151:6150/api/settings/{guild_id}', 
+                                   headers=bot_headers, 
+                                   timeout=5)
+        
+        if bot_response.status_code == 200:
+            bot_settings = bot_response.json()
+            logger.info(f"Got settings from bot API for guild {guild_id}")
+            
+            # Try to get guild data from bot API too
+            bot_guilds_response = requests.get('http://45.90.13.151:6150/api/guilds', 
+                                             headers=bot_headers, 
+                                             timeout=5)
+            
+            if bot_guilds_response.status_code == 200:
+                bot_guilds = bot_guilds_response.json()
+                matching_guild = next((g for g in bot_guilds if g['id'] == guild_id), None)
+                
+                if matching_guild:
+                    guild_name = matching_guild.get('name', 'Unknown Server')
+                    guild_icon = matching_guild.get('icon')
+                    guild_icon_url = f'https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.png' if guild_icon else '/static/img/default-server.png'
+                    
+                    logger.info(f"Using bot guild data for {guild_id}: {guild_name}")
+                    return render_template('dashboard.html', 
+                                         guild_id=guild_id,
+                                         guild_name=guild_name,
+                                         guild_icon_url=guild_icon_url,
+                                         settings=bot_settings)
+    except Exception as bot_error:
+        logger.error(f"Error getting guild data from bot: {bot_error}")
+        logger.error(traceback.format_exc())
+    
+    # Fall back to Discord API if bot is unavailable
     try:
         guild_response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
         if guild_response.status_code == 200:
@@ -155,6 +198,7 @@ def dashboard():
             else:
                 guild_icon_url = '/static/img/default-server.png'
         else:
+            logger.warning(f"Failed to fetch guild from Discord API: {guild_response.status_code}")
             guild_name = 'Unknown Server'
             guild_icon_url = '/static/img/default-server.png'
     except Exception as e:
@@ -513,6 +557,28 @@ def get_bot_stats():
 def logout():
     session.clear()
     return redirect(url_for('index'))
+
+@app.route('/api/bot-guilds')
+@login_required
+def get_bot_guilds():
+    """Get guilds directly from the bot API"""
+    try:
+        # Make a direct request to the bot API
+        headers = {
+            'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
+        }
+        
+        response = requests.get('http://45.90.13.151:6150/api/guilds', headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            logger.error(f"Failed to get guilds from bot API: {response.status_code}")
+            return jsonify([])
+    except Exception as e:
+        logger.error(f"Error getting bot guilds: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify([])
 
 if __name__ == '__main__':
     # Get port from environment variable or default to 5000

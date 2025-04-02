@@ -162,7 +162,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.body.appendChild(container);
         }
 
-        // Load channels (server info and settings are already loaded from template)
+        // First, fetch the latest guild data to ensure we have current information
+        await refreshGuildData();
+        
+        // Then load channels
         await loadChannels();
         
         // Set log channel if it exists (needs to be after channels are loaded)
@@ -186,6 +189,58 @@ document.addEventListener('DOMContentLoaded', async () => {
         showNotification('Error initializing dashboard: ' + error.message, 'error');
     }
 });
+
+// Refresh guild data
+async function refreshGuildData() {
+    try {
+        const response = await fetch(`/api/guild/${guildId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch guild data: ${response.status}`);
+        }
+        
+        const serverData = await response.json();
+        console.log('Received guild data:', serverData);
+        
+        // Update server settings in memory
+        serverSettings = serverData.settings || {};
+        
+        // Update page elements with server data
+        document.getElementById('server-name').textContent = serverData.name || 'Unknown Server';
+        document.getElementById('prefix').value = serverSettings.prefix || '?';
+        
+        // Update server icon
+        const serverIcon = document.getElementById('server-icon');
+        if (serverData.icon) {
+            serverIcon.src = `https://cdn.discordapp.com/icons/${guildId}/${serverData.icon}.png`;
+            serverIcon.onerror = function() {
+                this.style.display = 'none';
+                createInitialsIcon(serverData.name || 'Unknown Server');
+            };
+        } else {
+            serverIcon.style.display = 'none';
+            createInitialsIcon(serverData.name || 'Unknown Server');
+        }
+        
+        // Update stats
+        if (serverData.member_count) {
+            document.getElementById('member-count').textContent = serverData.member_count;
+        }
+        document.getElementById('command-count').textContent = serverSettings.command_count || 0;
+        document.getElementById('mod-actions').textContent = serverSettings.mod_actions || 0;
+        
+        // Update checkboxes
+        const cogs = serverSettings.cogs || [];
+        document.querySelectorAll('input[name="cogs"]').forEach(checkbox => {
+            checkbox.checked = cogs.includes(checkbox.value);
+        });
+        
+        return serverData;
+    } catch (error) {
+        console.error('Error refreshing guild data:', error);
+        showNotification('Failed to load server data: ' + error.message, 'error');
+        throw error;
+    }
+}
 
 // Load server channels
 async function loadChannels() {
