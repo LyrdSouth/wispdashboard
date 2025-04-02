@@ -15,7 +15,7 @@ missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
     print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
-    print("Please make sure these are set in your .env file or environment")
+    print("Please set these in your .env file or environment")
     sys.exit(1)
 
 # Import after setting up path

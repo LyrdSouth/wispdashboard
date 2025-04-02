@@ -17,6 +17,44 @@ load_dotenv()
 # Settings file path
 SETTINGS_FILE = os.path.join('dashboard', 'settings.json')
 
+def get_guild_settings(guild_id):
+    """Get settings for a guild"""
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                all_settings = json.load(f)
+                return all_settings.get(str(guild_id), {})
+    except Exception as e:
+        print(f"Error loading guild settings: {e}")
+    return {}
+
+def update_guild_settings(guild_id, settings):
+    """Update settings for a guild"""
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                all_settings = json.load(f)
+        else:
+            all_settings = {}
+        
+        all_settings[str(guild_id)] = settings
+        
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(all_settings, f, indent=4)
+    except Exception as e:
+        print(f"Error updating guild settings: {e}")
+
+def increment_command_count(guild_id):
+    """Increment the command count for a guild"""
+    try:
+        settings = get_guild_settings(guild_id)
+        if 'command_count' not in settings:
+            settings['command_count'] = 0
+        settings['command_count'] += 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing command count: {e}")
+
 # Bot configuration
 intents = discord.Intents.default()
 intents.message_content = True
@@ -97,9 +135,11 @@ class Bot(commands.Bot):
         await self.change_presence(activity=discord.Game(name="?help or /help"))
 
     async def on_command(self, ctx):
-        """Track command usage"""
-        if ctx.guild:
+        """Called when a command is invoked"""
+        try:
             increment_command_count(str(ctx.guild.id))
+        except Exception as e:
+            print(f"Error in on_command: {e}")
 
     async def on_command_error(self, ctx, error):
         """Handle command errors"""
