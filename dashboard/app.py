@@ -145,42 +145,61 @@ def get_guilds():
 def get_guild(guild_id):
     try:
         # Get guild settings
-        settings = get_guild_settings(guild_id)
+        try:
+            settings = get_guild_settings(guild_id)
+        except Exception as settings_error:
+            print(f"Error getting guild settings: {settings_error}")
+            settings = {}  # Use empty settings if there's an error
         
         # Get guild info from Discord
-        headers = {
-            'Authorization': f'Bearer {session["access_token"]}'
-        }
-        
-        response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
-        if response.status_code != 200:
+        try:
+            headers = {
+                'Authorization': f'Bearer {session["access_token"]}'
+            }
+            
+            response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
+            if response.status_code != 200:
+                return jsonify({
+                    'id': guild_id,
+                    'name': 'Unknown Server',
+                    'icon': None,
+                    'settings': settings
+                })
+            
+            guild_data = response.json()
+            
+            # Merge Discord data with settings
+            result = {
+                'id': guild_data.get('id', guild_id),
+                'name': guild_data.get('name', 'Unknown Server'),
+                'icon': guild_data.get('icon'),
+                'owner_id': guild_data.get('owner_id'),
+                'member_count': guild_data.get('approximate_member_count', 0),
+                'settings': settings
+            }
+            
+            return jsonify(result)
+        except Exception as discord_error:
+            print(f"Error getting Discord guild data: {discord_error}")
             return jsonify({
                 'id': guild_id,
-                'name': 'Unknown Server',
+                'name': 'Error Loading Server',
                 'icon': None,
                 'settings': settings
             })
-        
-        guild_data = response.json()
-        
-        # Merge Discord data with settings
-        result = {
-            'id': guild_data.get('id', guild_id),
-            'name': guild_data.get('name', 'Unknown Server'),
-            'icon': guild_data.get('icon'),
-            'owner_id': guild_data.get('owner_id'),
-            'member_count': guild_data.get('approximate_member_count', 0),
-            'settings': settings
-        }
-        
-        return jsonify(result)
     except Exception as e:
-        print(f"Error getting guild: {e}")
+        print(f"Unhandled error in get_guild: {e}")
         return jsonify({
             'id': guild_id,
-            'name': 'Error Loading Server',
+            'name': 'Error',
             'icon': None,
-            'settings': get_guild_settings(guild_id) 
+            'settings': {
+                'prefix': '?',
+                'cogs': ['image', 'security'],
+                'command_count': 0,
+                'mod_actions': 0,
+                'activity': []
+            }
         })
 
 @app.route('/api/guild/<guild_id>/channels')

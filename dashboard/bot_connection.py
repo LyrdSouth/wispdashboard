@@ -14,6 +14,22 @@ load_dotenv()
 # Settings cache
 settings_cache = {}
 
+# Ensure settings file exists
+def ensure_settings_file():
+    try:
+        settings_file = 'settings.json'
+        if not os.path.exists(settings_file):
+            with open(settings_file, 'w') as f:
+                json.dump({}, f)
+            print(f"Created empty settings file: {settings_file}")
+        return True
+    except Exception as e:
+        print(f"Error creating settings file: {e}")
+        return False
+
+# Initialize settings file
+ensure_settings_file()
+
 class BotConnection:
     def __init__(self):
         self.bot_token = os.getenv('DISCORD_TOKEN')
@@ -27,42 +43,56 @@ set_bot = BotConnection()
 def get_guild_settings(guild_id: str) -> Dict[str, Any]:
     """Get settings for a specific guild"""
     if guild_id is None:
-        return settings_cache
+        return {}
     
-    if guild_id not in settings_cache:
-        # Load settings from file
-        try:
-            with open('settings.json', 'r') as f:
-                all_settings = json.load(f)
-                settings_cache.update(all_settings)
-        except FileNotFoundError:
-            # Create an empty settings file
-            with open('settings.json', 'w') as f:
-                json.dump({}, f)
+    try:
+        if guild_id not in settings_cache:
+            # Load settings from file
+            try:
+                with open('settings.json', 'r') as f:
+                    all_settings = json.load(f)
+                    settings_cache.update(all_settings)
+            except FileNotFoundError:
+                # Create an empty settings file
+                with open('settings.json', 'w') as f:
+                    json.dump({}, f)
+                settings_cache[guild_id] = {}
+            except json.JSONDecodeError:
+                # Reset the file if it's corrupted
+                with open('settings.json', 'w') as f:
+                    json.dump({}, f)
+                settings_cache[guild_id] = {}
+        
+        # Initialize with defaults if not exist
+        if guild_id not in settings_cache:
             settings_cache[guild_id] = {}
-        except json.JSONDecodeError:
-            # Reset the file if it's corrupted
-            with open('settings.json', 'w') as f:
-                json.dump({}, f)
-            settings_cache[guild_id] = {}
-    
-    # Initialize with defaults if not exist
-    if guild_id not in settings_cache:
-        settings_cache[guild_id] = {}
-    
-    # Ensure required fields exist
-    if 'prefix' not in settings_cache[guild_id]:
-        settings_cache[guild_id]['prefix'] = '?'
-    if 'cogs' not in settings_cache[guild_id]:
-        settings_cache[guild_id]['cogs'] = ['image', 'security']
-    if 'command_count' not in settings_cache[guild_id]:
-        settings_cache[guild_id]['command_count'] = 0
-    if 'mod_actions' not in settings_cache[guild_id]:
-        settings_cache[guild_id]['mod_actions'] = 0
-    if 'activity' not in settings_cache[guild_id]:
-        settings_cache[guild_id]['activity'] = []
-    
-    return settings_cache.get(guild_id, {})
+        
+        # Return a copy to prevent unintended modifications
+        settings = settings_cache.get(guild_id, {}).copy()
+        
+        # Ensure required fields exist
+        if 'prefix' not in settings:
+            settings['prefix'] = '?'
+        if 'cogs' not in settings:
+            settings['cogs'] = ['image', 'security']
+        if 'command_count' not in settings:
+            settings['command_count'] = 0
+        if 'mod_actions' not in settings:
+            settings['mod_actions'] = 0
+        if 'activity' not in settings:
+            settings['activity'] = []
+        
+        return settings
+    except Exception as e:
+        print(f"Error in get_guild_settings: {e}")
+        # Return default settings on error
+        return {
+            'prefix': '?',
+            'cogs': ['image', 'security'],
+            'command_count': 0,
+            'mod_actions': 0,
+            'activity': []
+        }
 
 def get_default_settings():
     """Get default settings for a new guild"""
@@ -123,8 +153,11 @@ def get_mod_action_count(guild_id):
 def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
     """Update settings for a specific guild"""
     try:
+        # Ensure settings file exists
+        ensure_settings_file()
+        
         # Update cache
-        settings_cache[guild_id] = settings
+        settings_cache[guild_id] = settings.copy()
         
         # Load existing settings
         try:
@@ -147,15 +180,21 @@ def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
 
 def increment_command_count(guild_id: str):
     """Increment command count for a specific guild"""
-    settings = get_guild_settings(guild_id)
-    settings['command_count'] = settings.get('command_count', 0) + 1
-    update_guild_settings(guild_id, settings)
+    try:
+        settings = get_guild_settings(guild_id)
+        settings['command_count'] = settings.get('command_count', 0) + 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing command count: {e}")
 
 def increment_mod_action(guild_id: str):
     """Increment moderation action count for a specific guild"""
-    settings = get_guild_settings(guild_id)
-    settings['mod_actions'] = settings.get('mod_actions', 0) + 1
-    update_guild_settings(guild_id, settings)
+    try:
+        settings = get_guild_settings(guild_id)
+        settings['mod_actions'] = settings.get('mod_actions', 0) + 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing mod action: {e}")
 
 async def notify_bot(self, guild_id: str, action: str, data: Dict[str, Any]):
     """Log action in server's activity feed"""
@@ -217,13 +256,20 @@ async def notify_bot(self, guild_id: str, action: str, data: Dict[str, Any]):
 
 def add_activity(guild_id: str, activity_data: Dict[str, Any]):
     """Add an activity entry to the guild's settings"""
-    settings = get_guild_settings(guild_id)
-    
-    if 'activity' not in settings:
-        settings['activity'] = []
-    
-    settings['activity'].insert(0, activity_data)
-    # Keep only the most recent 50 activities
-    settings['activity'] = settings['activity'][:50]
-    
-    update_guild_settings(guild_id, settings) 
+    try:
+        settings = get_guild_settings(guild_id)
+        
+        if 'activity' not in settings:
+            settings['activity'] = []
+        
+        # Add timestamp if not present
+        if 'timestamp' not in activity_data:
+            activity_data['timestamp'] = datetime.datetime.now().isoformat()
+        
+        settings['activity'].insert(0, activity_data)
+        # Keep only the most recent 50 activities
+        settings['activity'] = settings['activity'][:50]
+        
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error adding activity: {e}") 
