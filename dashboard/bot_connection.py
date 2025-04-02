@@ -14,10 +14,15 @@ load_dotenv()
 # Settings cache
 settings_cache = {}
 
+# Get the full path for a file in the dashboard directory
+def get_file_path(filename):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, filename)
+
 # Ensure settings file exists
 def ensure_settings_file():
     try:
-        settings_file = 'settings.json'
+        settings_file = get_file_path('settings.json')
         if not os.path.exists(settings_file):
             with open(settings_file, 'w') as f:
                 json.dump({}, f)
@@ -49,17 +54,20 @@ def get_guild_settings(guild_id: str) -> Dict[str, Any]:
         if guild_id not in settings_cache:
             # Load settings from file
             try:
-                with open('settings.json', 'r') as f:
+                settings_file = get_file_path('settings.json')
+                with open(settings_file, 'r') as f:
                     all_settings = json.load(f)
                     settings_cache.update(all_settings)
             except FileNotFoundError:
                 # Create an empty settings file
-                with open('settings.json', 'w') as f:
+                settings_file = get_file_path('settings.json')
+                with open(settings_file, 'w') as f:
                     json.dump({}, f)
                 settings_cache[guild_id] = {}
             except json.JSONDecodeError:
                 # Reset the file if it's corrupted
-                with open('settings.json', 'w') as f:
+                settings_file = get_file_path('settings.json')
+                with open(settings_file, 'w') as f:
                     json.dump({}, f)
                 settings_cache[guild_id] = {}
         
@@ -161,7 +169,8 @@ def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
         
         # Load existing settings
         try:
-            with open('settings.json', 'r') as f:
+            settings_file = get_file_path('settings.json')
+            with open(settings_file, 'r') as f:
                 all_settings = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             all_settings = {}
@@ -170,7 +179,8 @@ def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
         all_settings[guild_id] = settings
         
         # Save to file
-        with open('settings.json', 'w') as f:
+        settings_file = get_file_path('settings.json')
+        with open(settings_file, 'w') as f:
             json.dump(all_settings, f, indent=4)
         
         return True
@@ -202,7 +212,7 @@ async def notify_bot(self, guild_id: str, action: str, data: Dict[str, Any]):
         settings = get_guild_settings(guild_id)
         
         # Add to activity history
-        timestamp = datetime.datetime.now().isoformat()
+        timestamp = datetime.now().isoformat()
         activity = {
             'timestamp': timestamp,
             'action': action,
@@ -243,7 +253,7 @@ async def notify_bot(self, guild_id: str, action: str, data: Dict[str, Any]):
                         title="Dashboard Update",
                         description=action_text,
                         color=discord.Color.blue(),
-                        timestamp=datetime.datetime.now()
+                        timestamp=datetime.now()
                     )
                     await channel.send(embed=embed)
             except Exception as e:
@@ -264,7 +274,7 @@ def add_activity(guild_id: str, activity_data: Dict[str, Any]):
         
         # Add timestamp if not present
         if 'timestamp' not in activity_data:
-            activity_data['timestamp'] = datetime.datetime.now().isoformat()
+            activity_data['timestamp'] = datetime.now().isoformat()
         
         settings['activity'].insert(0, activity_data)
         # Keep only the most recent 50 activities

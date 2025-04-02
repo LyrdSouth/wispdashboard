@@ -5,12 +5,30 @@ import requests
 from functools import wraps
 import json
 from werkzeug.middleware.proxy_fix import ProxyFix
+import logging
+import traceback
+import sys
 from bot_connection import get_guild_settings, update_guild_settings
 import asyncio
 import datetime
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger('dashboard')
+
 # Load environment variables
 load_dotenv()
+
+# Get the full path for a file in the dashboard directory
+def get_file_path(filename):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, filename)
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key')
@@ -143,12 +161,16 @@ def get_guilds():
 @app.route('/api/guild/<guild_id>')
 @login_required
 def get_guild(guild_id):
+    logger.info(f"Getting guild {guild_id}")
     try:
         # Get guild settings
         try:
+            logger.debug(f"Fetching settings for guild {guild_id}")
             settings = get_guild_settings(guild_id)
+            logger.debug(f"Got settings: {settings}")
         except Exception as settings_error:
-            print(f"Error getting guild settings: {settings_error}")
+            logger.error(f"Error getting guild settings: {settings_error}")
+            logger.error(traceback.format_exc())
             settings = {}  # Use empty settings if there's an error
         
         # Get guild info from Discord
@@ -157,8 +179,12 @@ def get_guild(guild_id):
                 'Authorization': f'Bearer {session["access_token"]}'
             }
             
+            logger.debug(f"Fetching guild data from Discord API")
             response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
+            logger.debug(f"Discord API response status: {response.status_code}")
+            
             if response.status_code != 200:
+                logger.warning(f"Failed to fetch guild from Discord API: {response.status_code}")
                 return jsonify({
                     'id': guild_id,
                     'name': 'Unknown Server',
@@ -167,6 +193,7 @@ def get_guild(guild_id):
                 })
             
             guild_data = response.json()
+            logger.debug(f"Got guild data: {guild_data}")
             
             # Merge Discord data with settings
             result = {
@@ -178,9 +205,11 @@ def get_guild(guild_id):
                 'settings': settings
             }
             
+            logger.info(f"Successfully built guild response for {guild_id}")
             return jsonify(result)
         except Exception as discord_error:
-            print(f"Error getting Discord guild data: {discord_error}")
+            logger.error(f"Error getting Discord guild data: {discord_error}")
+            logger.error(traceback.format_exc())
             return jsonify({
                 'id': guild_id,
                 'name': 'Error Loading Server',
@@ -188,7 +217,8 @@ def get_guild(guild_id):
                 'settings': settings
             })
     except Exception as e:
-        print(f"Unhandled error in get_guild: {e}")
+        logger.error(f"Unhandled error in get_guild: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'id': guild_id,
             'name': 'Error',
@@ -351,14 +381,16 @@ def get_bot_stats():
         
         # Load all settings
         try:
-            with open('settings.json', 'r') as f:
+            settings_file = get_file_path('settings.json')
+            with open(settings_file, 'r') as f:
                 all_settings = json.load(f)
                 total_servers = len(all_settings)
                 
                 for guild_id, settings in all_settings.items():
                     total_commands += settings.get('command_count', 0)
                     total_mod_actions += settings.get('mod_actions', 0)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error loading settings file: {e}")
             pass
         
         return jsonify({
@@ -367,7 +399,8 @@ def get_bot_stats():
             'modActions': total_mod_actions
         })
     except Exception as e:
-        print(f"Error getting stats: {e}")
+        logger.error(f"Error getting stats: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'servers': 0,
             'commands': 0,
