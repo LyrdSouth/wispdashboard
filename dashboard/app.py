@@ -496,38 +496,6 @@ def update_guild_prefix(guild_id):
         settings['prefix'] = prefix
         update_guild_settings(guild_id, settings)
         
-        # DIRECT CONNECTION TO BOT API ON SILLYDEV
-        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
-        bot_token = os.getenv('DISCORD_TOKEN')
-        
-        # Prepare data for bot API
-        bot_data = {
-            'prefix': prefix
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {bot_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        try:
-            # Send API request to SillyDev bot
-            bot_response = requests.post(
-                f"{bot_api_url}/settings/{guild_id}", 
-                headers=headers,
-                json=bot_data,
-                timeout=10
-            )
-            
-            if bot_response.status_code == 200:
-                logger.info(f"Guild {guild_id} prefix updated to: {prefix} (synced with bot on SillyDev)")
-            else:
-                logger.warning(f"Failed to sync prefix with bot API: {bot_response.status_code} - {bot_response.text}")
-                # Still return success since we updated our local copy
-        except Exception as bot_error:
-            logger.error(f"Error connecting to bot API on SillyDev: {bot_error}")
-            # Continue even if bot sync fails - we'll try again next time
-            
         # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()
         if 'activity' not in settings:
@@ -562,36 +530,6 @@ def update_guild_cogs(guild_id):
         settings['cogs'] = cogs
         update_guild_settings(guild_id, settings)
         
-        # DIRECT CONNECTION TO BOT API ON SILLYDEV
-        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
-        bot_token = os.getenv('DISCORD_TOKEN')
-        
-        # Prepare data for bot API
-        bot_data = {
-            'cogs': cogs
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {bot_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        try:
-            # Send API request to SillyDev bot
-            bot_response = requests.post(
-                f"{bot_api_url}/settings/{guild_id}", 
-                headers=headers,
-                json=bot_data,
-                timeout=10
-            )
-            
-            if bot_response.status_code == 200:
-                logger.info(f"Guild {guild_id} cogs updated to: {cogs} (synced with bot on SillyDev)")
-            else:
-                logger.warning(f"Failed to sync cogs with bot API: {bot_response.status_code} - {bot_response.text}")
-        except Exception as bot_error:
-            logger.error(f"Error connecting to bot API on SillyDev: {bot_error}")
-        
         # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()
         if 'activity' not in settings:
@@ -625,36 +563,6 @@ def update_guild_log_channel(guild_id):
         # Update log channel locally
         settings['log_channel'] = channel_id
         update_guild_settings(guild_id, settings)
-        
-        # DIRECT CONNECTION TO BOT API ON SILLYDEV
-        bot_api_url = os.getenv('BOT_API_URL', 'http://45.90.13.151:6150/api')
-        bot_token = os.getenv('DISCORD_TOKEN')
-        
-        # Prepare data for bot API
-        bot_data = {
-            'log_channel': channel_id
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {bot_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        try:
-            # Send API request to SillyDev bot
-            bot_response = requests.post(
-                f"{bot_api_url}/settings/{guild_id}", 
-                headers=headers,
-                json=bot_data,
-                timeout=10
-            )
-            
-            if bot_response.status_code == 200:
-                logger.info(f"Guild {guild_id} log channel updated to: {channel_id} (synced with bot on SillyDev)")
-            else:
-                logger.warning(f"Failed to sync log channel with bot API: {bot_response.status_code} - {bot_response.text}")
-        except Exception as bot_error:
-            logger.error(f"Error connecting to bot API on SillyDev: {bot_error}")
         
         # Add activity entry to our local record
         timestamp = datetime.datetime.now().isoformat()

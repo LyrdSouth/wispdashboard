@@ -9,13 +9,17 @@ import aiohttp
 import asyncio
 import typing
 from datetime import datetime
-import traceback
+from flask import Flask, request, jsonify
 
 # Load environment variables
 load_dotenv()
 
 # Settings file path
 SETTINGS_FILE = os.path.join('dashboard', 'settings.json')
+
+# Flask app for API
+api_app = Flask(__name__)
+api_app.config['JSON_SORT_KEYS'] = False
 
 # Bot configuration
 intents = discord.Intents.default()
@@ -27,6 +31,155 @@ EMBED_COLOR = discord.Color.from_rgb(187, 144, 252)  # Soft purple color
 
 # Settings management
 settings_cache = {}
+
+# API Authentication
+def authenticate_request():
+    auth_header = request.headers.get('Authorization')
+    expected_token = f"Bearer {os.getenv('DISCORD_TOKEN')}"
+    
+    if not auth_header or auth_header != expected_token:
+        return False
+    return True
+
+# API Routes
+@api_app.route('/api/settings/<guild_id>', methods=['GET'])
+def api_get_guild_settings(guild_id):
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    settings = get_guild_settings(guild_id)
+    return jsonify(settings)
+
+@api_app.route('/api/settings/<guild_id>', methods=['POST'])
+def api_update_guild_settings(guild_id):
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.json
+    success = update_guild_settings(guild_id, data)
+    
+    if success:
+        return jsonify({"success": True, "settings": data})
+    else:
+        return jsonify({"error": "Failed to update settings"}), 500
+
+@api_app.route('/api/guilds', methods=['GET'])
+def api_get_guilds():
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    guilds = []
+    for guild in bot.guilds:
+        guilds.append({
+            "id": str(guild.id),
+            "name": guild.name,
+            "icon": guild.icon.url if guild.icon else None,
+            "member_count": guild.member_count
+        })
+    
+    return jsonify(guilds)
+
+@api_app.route('/api/channels/<guild_id>', methods=['GET'])
+def api_get_channels(guild_id):
+    if not authenticate_request():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        return jsonify({"error": "Guild not found"}), 404
+    
+    channels = []
+    for channel in guild.text_channels:
+        channels.append({
+            "id": str(channel.id),
+            "name": channel.name,
+            "type": 0,  # Text channel
+            "position": channel.position
+        })
+    
+    return jsonify(channels)
+
+def get_guild_settings(guild_id: str) -> dict:
+    """Get settings for a specific guild"""
+    if guild_id is None:
+        return settings_cache
+    
+    if guild_id not in settings_cache:
+        # Load settings from file
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                settings_cache.update(json.load(f))
+        except FileNotFoundError:
+            settings_cache[guild_id] = {}
+        except json.JSONDecodeError:
+            settings_cache[guild_id] = {}
+    
+    # Return a copy to prevent unintended modifications
+    settings = settings_cache.get(guild_id, {}).copy()
+    
+    # Ensure required fields exist
+    if 'prefix' not in settings:
+        settings['prefix'] = '?'
+    if 'cogs' not in settings:
+        settings['cogs'] = ['image', 'security']
+    if 'command_count' not in settings:
+        settings['command_count'] = 0
+    if 'mod_actions' not in settings:
+        settings['mod_actions'] = 0
+    if 'activity' not in settings:
+        settings['activity'] = []
+    
+    # Add guild info from Discord if available
+    guild = bot.get_guild(int(guild_id)) if bot else None
+    if guild:
+        settings['name'] = guild.name
+        settings['icon'] = str(guild.icon.url) if guild.icon else None
+        settings['member_count'] = guild.member_count
+    
+    return settings
+
+def update_guild_settings(guild_id: str, settings: dict) -> bool:
+    """Update settings for a specific guild"""
+    try:
+        # Update cache
+        settings_cache[guild_id] = settings.copy()
+        
+        # Load existing settings
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                all_settings = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            all_settings = {}
+        
+        # Update settings for this guild
+        all_settings[guild_id] = settings
+        
+        # Save to file
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(all_settings, f, indent=4)
+        
+        return True
+    except Exception as e:
+        print(f"Error updating settings: {e}")
+        return False
+
+def increment_command_count(guild_id: str):
+    """Increment command count for a specific guild"""
+    try:
+        settings = get_guild_settings(guild_id)
+        settings['command_count'] = settings.get('command_count', 0) + 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing command count: {e}")
+
+def increment_mod_action(guild_id: str):
+    """Increment moderation action count for a specific guild"""
+    try:
+        settings = get_guild_settings(guild_id)
+        settings['mod_actions'] = settings.get('mod_actions', 0) + 1
+        update_guild_settings(guild_id, settings)
+    except Exception as e:
+        print(f"Error incrementing mod action: {e}")
 
 # Initialize bot with both prefix and slash commands
 class Bot(commands.Bot):
@@ -48,48 +201,34 @@ class Bot(commands.Bot):
             return '?'
         
         guild_id = str(message.guild.id)
+        if guild_id not in self.settings_cache:
+            settings = get_guild_settings(guild_id)
+            self.settings_cache[guild_id] = settings
         
-        # Try to get prefix from cache first
-        if guild_id in self.settings_cache:
-            return self.settings_cache[guild_id].get('prefix', '?')
-        
-        # Try to load from dashboard settings
-        try:
-            dashboard_settings_path = os.path.join('dashboard', 'settings.json')
-            if os.path.exists(dashboard_settings_path):
-                with open(dashboard_settings_path, 'r') as f:
-                    all_settings = json.load(f)
-                    if guild_id in all_settings and 'prefix' in all_settings[guild_id]:
-                        prefix = all_settings[guild_id]['prefix']
-                        self.settings_cache[guild_id] = {'prefix': prefix}
-                        return prefix
-        except Exception as e:
-            print(f"Error loading prefix from dashboard: {e}")
-        
-        # Fall back to prefixes.json
-        try:
-            if guild_id not in self.settings_cache:
-                settings = get_guild_settings(guild_id)
-                self.settings_cache[guild_id] = settings
-            
-            return self.settings_cache[guild_id].get('prefix', '?')
-        except Exception as e:
-            print(f"Error loading prefix: {e}")
-            return '?'
+        return self.settings_cache[guild_id].get('prefix', '?')
 
     async def setup_hook(self):
-        """Load extensions and set up the bot"""
+        """Load extensions and sync commands"""
         for ext in self.initial_extensions:
-            try:
-                await self.load_extension(ext)
-                print(f"Loaded extension: {ext}")
-            except Exception as e:
-                print(f"Failed to load extension {ext}: {e}")
+            await self.load_extension(ext)
+        
+        # Sync commands with Discord
+        await self.tree.sync()
+        print("Slash commands synced!")
 
     async def on_ready(self):
-        """Called when the bot is ready"""
-        print(f"Logged in as {self.user.name} ({self.user.id})")
+        print(f'Bot is ready! Logged in as {self.user.name}')
         await self.change_presence(activity=discord.Game(name="?help or /help"))
+        
+        # Start the API in a separate thread
+        import threading
+        def run_api():
+            api_app.run(host='0.0.0.0', port=6150)
+        
+        api_thread = threading.Thread(target=run_api)
+        api_thread.daemon = True
+        api_thread.start()
+        print("API server started on port 6150")
 
     async def on_command(self, ctx):
         """Track command usage"""
@@ -99,14 +238,13 @@ class Bot(commands.Bot):
     async def on_command_error(self, ctx, error):
         """Handle command errors"""
         if isinstance(error, commands.CommandNotFound):
-            return
+        return
         elif isinstance(error, commands.MissingPermissions):
             await ctx.send("You don't have permission to use this command!")
         else:
-            print(f"Command error: {error}")
-            await ctx.send(f"An error occurred: {str(error)}")
+            print(f"Error in command {ctx.command}: {error}")
+            await ctx.send("An error occurred while executing this command.")
 
-# Initialize bot
 bot = Bot()
 bot.remove_command('help')  # Remove default help command
 
@@ -157,25 +295,49 @@ async def on_message_delete(message):
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member, *, reason=None):
-    """Ban a member from the server"""
-    if member.top_role >= ctx.author.top_role:
-        await ctx.send("You cannot ban this user due to role hierarchy!")
-        return
-        
+async def ban(ctx, user: typing.Union[discord.Member, discord.User, int], *, reason=None):
     try:
-        await member.ban(reason=reason)
+        # If an integer ID was passed, fetch the user
+        if isinstance(user, int):
+            user = await bot.fetch_user(user)
+        
+        # Check if user is a member of the server
+        member = None
+        try:
+            member = await ctx.guild.fetch_member(user.id)
+        except discord.NotFound:
+            pass
+
+        # If they're a member, check role hierarchy
+        if member and member.top_role >= ctx.author.top_role:
+            await ctx.send("You cannot ban this user due to role hierarchy!")
+        return
+
+        # Try to DM the user
+        try:
+            dm_embed = discord.Embed(
+                title="You have been banned",
+                description=f"You have been banned from {ctx.guild.name}\nReason: {reason if reason else 'No reason provided'}",
+                color=EMBED_COLOR
+            )
+            await user.send(embed=dm_embed)
+        except discord.Forbidden:
+            pass  # Silently fail if we can't DM the user
+
+        await ctx.guild.ban(user, reason=reason)
+        
+        # Track moderation action
+        increment_mod_action(str(ctx.guild.id))
+        
         embed = discord.Embed(
-            title="Member Banned",
-            description=f"{member.mention} has been banned by {ctx.author.mention}",
+            description=f'Banned {user.mention}\nReason: {reason if reason else "No reason provided"}',
             color=EMBED_COLOR
         )
-        if reason:
-            embed.add_field(name="Reason", value=reason)
         await ctx.send(embed=embed)
-        increment_mod_action(str(ctx.guild.id))
+    except discord.NotFound:
+        await ctx.send("User not found! Please provide a valid user ID or mention.")
     except discord.Forbidden:
-        await ctx.send("I don't have permission to ban members!")
+        await ctx.send("I don't have permission to ban this user!")
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
 
@@ -238,7 +400,7 @@ async def kick_error(ctx, error):
             member = await ctx.guild.fetch_member(member_id)
             if member.top_role >= ctx.author.top_role:
                 await ctx.send("You cannot kick this user due to role hierarchy!")
-                return
+        return
             await member.kick(reason=ctx.message.content.split(maxsplit=2)[2] if len(ctx.message.content.split()) > 2 else None)
             await ctx.send(f'Kicked {member.mention} for reason: {ctx.message.content.split(maxsplit=2)[2] if len(ctx.message.content.split()) > 2 else None}')
         except (ValueError, discord.NotFound):
@@ -284,7 +446,7 @@ async def timeout_error(ctx, error):
             member = await ctx.guild.fetch_member(member_id)
             if member.top_role >= ctx.author.top_role:
                 await ctx.send("You cannot timeout this user due to role hierarchy!")
-                return
+        return
             reason = ' '.join(args[3:]) if len(args) > 3 else None
             await member.timeout(duration=duration, reason=reason)
             await ctx.send(f'Timed out {member.mention} for {duration} seconds. Reason: {reason}')
@@ -329,6 +491,7 @@ async def untimeout_error(ctx, error):
             member = await ctx.guild.fetch_member(member_id)
             if member.top_role >= ctx.author.top_role:
                 await ctx.send("You cannot remove timeout from this user due to role hierarchy!")
+        return
             reason = ' '.join(ctx.message.content.split()[2:]) if len(ctx.message.content.split()) > 2 else None
             await member.timeout(duration=None, reason=reason)
             embed = discord.Embed(
@@ -531,7 +694,7 @@ async def slash_ban(interaction: discord.Interaction, user: discord.Member, reas
         # Check role hierarchy
         if user.top_role >= interaction.user.top_role:
             await interaction.response.send_message("You cannot ban this user due to role hierarchy!", ephemeral=True)
-            return
+        return
 
         # Try to DM the user
         try:
@@ -611,7 +774,7 @@ async def slash_untimeout(interaction: discord.Interaction, user: discord.Member
     if user.top_role >= interaction.user.top_role:
         await interaction.response.send_message("You cannot remove timeout from this user due to role hierarchy!", ephemeral=True)
         return
-    
+        
     # Try to DM the user
     try:
         dm_embed = discord.Embed(
@@ -801,9 +964,4 @@ async def slash_repo(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 # Run the bot
-if __name__ == "__main__":
-    try:
-        bot.run(os.getenv('DISCORD_TOKEN'))
-    except Exception as e:
-        print(f"Error starting bot: {e}")
-        print(traceback.format_exc()) 
+bot.run(os.getenv('DISCORD_TOKEN')) 
