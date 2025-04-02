@@ -319,9 +319,10 @@ def get_guild(guild_id):
             # Try different Discord API endpoints to get the most data
             logger.debug(f"Fetching guild data from Discord API")
             
-            # Try to get extended guild info (with member count)
+            # Try to get extended guild info with special guilds.members.read scope
             try:
-                logger.debug(f"Fetching detailed guild data to get member count")
+                logger.debug(f"Fetching detailed guild data with members.read scope")
+                # First try with special endpoint that returns member count
                 detailed_guild_response = requests.get(
                     f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}?with_counts=true', 
                     headers=headers
@@ -329,39 +330,43 @@ def get_guild(guild_id):
                 
                 if detailed_guild_response.status_code == 200:
                     guild_data = detailed_guild_response.json()
-                    logger.info(f"Got detailed guild data with member count: {guild_data.get('name')} ({guild_data.get('approximate_member_count', 0)} members)")
+                    logger.info(f"Got detailed guild data: {guild_data}")
+                    
+                    # Log specific fields we're interested in
+                    member_count = guild_data.get('approximate_member_count', 0)
+                    if member_count:
+                        logger.info(f"Found approximate_member_count: {member_count}")
+                    presence_count = guild_data.get('approximate_presence_count', 0)
+                    if presence_count:
+                        logger.info(f"Found approximate_presence_count: {presence_count}")
+                    
+                    # Store this detailed data
                     store_guild_info(guild_id, guild_data)
+                    
+                    # Get updated result with the fresh data
                     result = get_combined_guild_data(guild_id)
+                    logger.info(f"Updated result has member_count: {result.get('member_count', 0)}")
                 else:
                     logger.warning(f"Could not get detailed guild data: {detailed_guild_response.status_code}")
+                    logger.debug(f"Response body: {detailed_guild_response.text}")
                     
-                    # Try the /users/@me/guilds endpoint as fallback
+                    # Fall back to regular guild info endpoint
                     guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
                     if guilds_response.status_code == 200:
                         user_guilds = guilds_response.json()
                         # Find the specific guild in the user's guilds
                         matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
                         if matching_guild:
-                            logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
+                            logger.info(f"Found guild in user's guilds: {matching_guild}")
+                            # Try to see if we can get member count here
+                            if 'approximate_member_count' in matching_guild:
+                                logger.info(f"Found member count in guild data: {matching_guild['approximate_member_count']}")
+                            
                             store_guild_info(guild_id, matching_guild)
                             result = get_combined_guild_data(guild_id)
             except Exception as e:
                 logger.error(f"Error getting detailed guild data: {e}")
                 logger.error(traceback.format_exc())
-                
-                # Try the /users/@me/guilds endpoint as fallback
-                try:
-                    guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
-                    if guilds_response.status_code == 200:
-                        user_guilds = guilds_response.json()
-                        # Find the specific guild in the user's guilds
-                        matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
-                        if matching_guild:
-                            logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
-                            store_guild_info(guild_id, matching_guild)
-                            result = get_combined_guild_data(guild_id)
-                except Exception as guilds_error:
-                    logger.error(f"Error getting user guilds: {guilds_error}")
         
         logger.info(f"Returning guild data: {result['name']} (Member count: {result.get('member_count', 0)})")
         return jsonify(result)
@@ -373,6 +378,7 @@ def get_guild(guild_id):
             'id': guild_id,
             'name': 'Unknown Server',
             'icon': None,
+            'member_count': 0,  # Include member_count even in error response
             'settings': {
                 'prefix': '?',
                 'cogs': ['image', 'security'],

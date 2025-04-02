@@ -234,7 +234,8 @@ async function refreshGuildData() {
         }
         
         // Update stats with better fallbacks
-        if (serverData.member_count && serverData.member_count > 0) {
+        console.log("Member count data:", serverData.member_count, typeof serverData.member_count);
+        if (serverData.member_count !== undefined) {
             document.getElementById('member-count').textContent = serverData.member_count;
         } else {
             document.getElementById('member-count').textContent = 'N/A';

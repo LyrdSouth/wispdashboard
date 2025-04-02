@@ -187,17 +187,19 @@ def get_combined_guild_data(guild_id: str) -> Dict[str, Any]:
         'name': settings.get('name', 'Unknown Server'),
         'icon': settings.get('icon'),
         'owner_id': settings.get('owner_id'),
-        'member_count': settings.get('member_count', 0),
+        'member_count': settings.get('member_count', 0),  # Always include member_count, default to 0
         'settings': {
             'prefix': settings.get('prefix', '?'),
             'cogs': settings.get('cogs', ['image', 'security']),
             'command_count': settings.get('command_count', 0),
             'mod_actions': settings.get('mod_actions', 0),
             'log_channel': settings.get('log_channel'),
-            'activity': settings.get('activity', [])
+            'activity': settings.get('activity', []),
+            'member_count': settings.get('member_count', 0)  # Include in settings too for backward compatibility
         }
     }
     
+    print(f"Combined guild data for {guild_id}: member_count = {result['member_count']}")
     return result
 
 def increment_command_count(guild_id: str):
