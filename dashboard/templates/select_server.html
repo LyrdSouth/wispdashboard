@@ -95,7 +95,7 @@
     <div class="container">
         {% set has_admin_servers = false %}
         {% for guild in guilds %}
-            {% if guild.get('permissions') and (guild.get('permissions') & 0x8) == 0x8 or guild.get('owner') %}
+            {% if guild.get('owner') or guild.get('permissions') == '2147483647' %}
                 {% set has_admin_servers = true %}
                 <div class="row g-4">
                     <div class="col-md-4">
