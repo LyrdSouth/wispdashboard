@@ -8,7 +8,13 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
 import traceback
 import sys
-from bot_connection import get_guild_settings, update_guild_settings, get_bot_settings, get_bot_channels, sync_with_bot
+from bot_connection import (
+    get_guild_settings, 
+    update_guild_settings, 
+    get_combined_guild_data, 
+    store_guild_info, 
+    get_file_path
+)
 import asyncio
 import datetime
 
@@ -147,56 +153,60 @@ def select_server():
         if response.status_code == 200:
             discord_guilds = response.json()
             logger.info(f"Got {len(discord_guilds)} guilds from Discord API")
+            
+            # Store discord guild data for future use
+            for guild in discord_guilds:
+                store_guild_info(guild['id'], guild)
         else:
             logger.error(f"Failed to fetch guilds from Discord API: {response.status_code}")
     except Exception as e:
         logger.error(f"Error fetching Discord guilds: {e}")
     
-    # Get bot guilds as a backup (or to merge with Discord guilds)
-    bot_guilds = []
+    # Get any guilds we have stored locally in settings.json
+    stored_guilds = []
     try:
-        bot_headers = {
-            'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
-        }
+        settings_file = get_file_path('settings.json')
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r') as f:
+                all_settings = json.load(f)
+                
+                for guild_id, settings in all_settings.items():
+                    if 'name' in settings:  # Only include guilds with names
+                        stored_guilds.append({
+                            'id': guild_id,
+                            'name': settings.get('name', 'Unknown Server'),
+                            'icon': settings.get('icon'),
+                            'member_count': settings.get('member_count', 0)
+                        })
         
-        bot_response = requests.get('http://45.90.13.151:6150/api/guilds', 
-                                 headers=bot_headers, 
-                                 timeout=10)
-        
-        if bot_response.status_code == 200:
-            bot_guilds = bot_response.json()
-            logger.info(f"Got {len(bot_guilds)} guilds from bot API")
-        else:
-            logger.error(f"Failed to fetch guilds from bot API: {bot_response.status_code}")
+        if stored_guilds:
+            logger.info(f"Got {len(stored_guilds)} guilds from local storage")
     except Exception as e:
-        logger.error(f"Error fetching bot guilds: {e}")
+        logger.error(f"Error getting stored guilds: {e}")
     
-    # If we failed to get Discord guilds but have bot guilds
-    if not discord_guilds and bot_guilds:
-        guilds = bot_guilds
-        logger.info("Using bot guilds only")
-    # If we have guilds from both sources, merge them
-    elif discord_guilds and bot_guilds:
-        # Create a map of guild IDs from Discord for quick lookups
-        discord_guild_map = {g['id']: g for g in discord_guilds}
-        
-        # Add bot guilds if they're not already in Discord guilds
-        for bot_guild in bot_guilds:
-            if bot_guild['id'] not in discord_guild_map:
-                discord_guilds.append(bot_guild)
-                logger.info(f"Added guild from bot API: {bot_guild.get('name', 'Unknown')}")
-        
+    # Combine guilds from Discord and stored settings
+    if discord_guilds:
+        # If we have Discord guilds, use them as the base
         guilds = discord_guilds
-        logger.info(f"Using merged guilds: {len(guilds)} total")
+        
+        # Create a map of guild IDs we already have from Discord
+        guild_map = {g['id']: g for g in guilds}
+        
+        # Add any stored guilds that aren't in our Discord list
+        for stored_guild in stored_guilds:
+            if stored_guild['id'] not in guild_map:
+                guilds.append(stored_guild)
+                logger.info(f"Added stored guild: {stored_guild['name']}")
     else:
-        # Just use whatever we got from Discord
-        guilds = discord_guilds
-        logger.info("Using Discord guilds only")
+        # If Discord API failed, just use stored guilds
+        guilds = stored_guilds
     
-    # Pass bot token and guild list to the template
-    bot_token = os.getenv('DISCORD_TOKEN')
+    logger.info(f"Showing {len(guilds)} guilds total")
     
-    return render_template('select_server.html', guilds=guilds, bot_token=bot_token)
+    # Sort guilds by name
+    guilds.sort(key=lambda g: g.get('name', 'Unknown').lower())
+    
+    return render_template('select_server.html', guilds=guilds)
 
 @app.route('/dashboard')
 @login_required
@@ -232,95 +242,46 @@ def dashboard():
         logger.error(f"Error verifying user guild access: {e}")
         guilds = []
     
-    # Check if user has access to this guild - first from Discord, then from bot if Discord fails
-    has_access = any(g['id'] == guild_id for g in guilds)
+    # Check if user has access to this guild (if we got guild data from Discord)
+    has_access = any(g['id'] == guild_id for g in guilds) if guilds else True
     
-    # If user doesn't have access according to Discord, check if the bot has the guild
-    if not has_access and guilds:  # Only if Discord returned results but guild not found
-        logger.warning(f"User doesn't appear to have access to guild {guild_id} via Discord API")
-        try:
-            # Try to get guild info from bot API
-            bot_headers = {
-                'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
-            }
-            
-            # Check if the bot has this guild
-            bot_response = requests.get(f'http://45.90.13.151:6150/api/settings/{guild_id}', 
-                                      headers=bot_headers, 
-                                      timeout=10)
-            
-            if bot_response.status_code == 200:
-                logger.info(f"Bot has access to guild {guild_id}, allowing access")
-                has_access = True
-        except Exception as bot_error:
-            logger.error(f"Error checking bot access to guild: {bot_error}")
-    
-    # If user still doesn't have access after all checks, redirect
-    if not has_access and guilds:  # Only enforce if we got guild data from somewhere
+    # If user doesn't have access, redirect
+    if not has_access:
         logger.warning(f"User doesn't have access to guild {guild_id}, redirecting")
         return redirect(url_for('select_server'))
     
-    # Try to get guild data from bot first
-    try:
-        # Make a direct request to the bot API for this guild
-        bot_headers = {
-            'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
-        }
-        
-        bot_response = requests.get(f'http://45.90.13.151:6150/api/settings/{guild_id}', 
-                                   headers=bot_headers, 
-                                   timeout=10)
-        
-        if bot_response.status_code == 200:
-            bot_settings = bot_response.json()
-            logger.info(f"Got settings from bot API for guild {guild_id}")
-            
-            # Try to get guild data from bot API too
-            bot_guilds_response = requests.get('http://45.90.13.151:6150/api/guilds', 
-                                             headers=bot_headers, 
-                                             timeout=10)
-            
-            if bot_guilds_response.status_code == 200:
-                bot_guilds = bot_guilds_response.json()
-                matching_guild = next((g for g in bot_guilds if g['id'] == guild_id), None)
-                
-                if matching_guild:
-                    guild_name = matching_guild.get('name', 'Unknown Server')
-                    guild_icon = matching_guild.get('icon')
-                    guild_icon_url = f'https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.png' if guild_icon else '/static/img/default-server.png'
-                    
-                    logger.info(f"Using bot guild data for {guild_id}: {guild_name}")
-                    return render_template('dashboard.html', 
-                                         guild_id=guild_id,
-                                         guild_name=guild_name,
-                                         guild_icon_url=guild_icon_url,
-                                         settings=bot_settings)
-    except Exception as bot_error:
-        logger.error(f"Error getting guild data from bot: {bot_error}")
-        logger.error(traceback.format_exc())
+    # Get guild data from our local settings
+    guild_data = get_combined_guild_data(guild_id)
+    guild_name = guild_data.get('name', 'Unknown Server')
+    guild_icon = guild_data.get('icon')
     
-    # Fall back to Discord API if bot is unavailable
-    try:
-        guild_response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
-        if guild_response.status_code == 200:
-            guild_data = guild_response.json()
-            guild_name = guild_data.get('name', 'Unknown Server')
-            guild_icon = guild_data.get('icon')
-            if guild_icon:
-                guild_icon_url = f'https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.png'
-            else:
-                guild_icon_url = '/static/img/default-server.png'
-        else:
-            logger.warning(f"Failed to fetch guild from Discord API: {guild_response.status_code}")
-            guild_name = 'Unknown Server'
-            guild_icon_url = '/static/img/default-server.png'
-    except Exception as e:
-        logger.error(f"Error fetching guild data: {e}")
-        guild_name = 'Error Loading Server'
+    # If we have an access token, try to update our local data from Discord
+    if 'access_token' in session:
+        try:
+            # Try to get guild data from Discord API
+            guild_response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
+            
+            if guild_response.status_code == 200:
+                discord_guild_data = guild_response.json()
+                # Update our local storage with this fresh data
+                store_guild_info(guild_id, discord_guild_data)
+                
+                # Update our vars for the template
+                guild_name = discord_guild_data.get('name', guild_name)
+                guild_icon = discord_guild_data.get('icon', guild_icon)
+                logger.info(f"Updated guild info from Discord: {guild_name}")
+        except Exception as e:
+            logger.error(f"Error fetching guild data from Discord: {e}")
+            # Continue with local data if Discord API fails
+    
+    # Build the icon URL
+    if guild_icon:
+        guild_icon_url = f'https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.png'
+    else:
         guild_icon_url = '/static/img/default-server.png'
     
-    # Get current settings for this guild
-    settings = get_guild_settings(guild_id)
+    # Get settings (already included in guild_data)
+    settings = guild_data.get('settings', {})
     
     return render_template('dashboard.html', 
                            guild_id=guild_id,
@@ -346,88 +307,99 @@ def get_guilds():
 def get_guild(guild_id):
     logger.info(f"Getting guild {guild_id}")
     try:
-        # Try to get guild information from Discord API first with extended permissions
-        headers = {
-            'Authorization': f'Bearer {session["access_token"]}'
-        }
-        
-        # Try different Discord API endpoints to get the most data
-        logger.debug(f"Fetching guild data from Discord API")
-        
-        guild_data = None
-        
-        # Try the /users/@me/guilds endpoint first
-        try:
-            guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
-            if guilds_response.status_code == 200:
-                user_guilds = guilds_response.json()
-                # Find the specific guild in the user's guilds
-                matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
-                if matching_guild:
-                    logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
-                    guild_data = matching_guild
-                    # Store this info for future use
-                    store_guild_info(guild_id, matching_guild)
-        except Exception as e:
-            logger.error(f"Error getting user guilds: {e}")
-        
-        # If we couldn't get it from /users/@me/guilds, try direct guild endpoint
-        if not guild_data:
-            try:
-                direct_response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
-                if direct_response.status_code == 200:
-                    guild_data = direct_response.json()
-                    logger.info(f"Got guild data directly: {guild_data['name']}")
-                    # Store this info for future use
-                    store_guild_info(guild_id, guild_data)
-            except Exception as e:
-                logger.error(f"Error getting guild directly: {e}")
-        
-        # Get combined data with any info we've stored plus settings
+        # Get data from local storage first
         result = get_combined_guild_data(guild_id)
+        
+        # Try to get guild information from Discord API to update our local data
+        if 'access_token' in session:
+            headers = {
+                'Authorization': f'Bearer {session["access_token"]}'
+            }
+            
+            # Try different Discord API endpoints to get the most data
+            logger.debug(f"Fetching guild data from Discord API")
+            
+            # Try the /users/@me/guilds endpoint first
+            try:
+                guilds_response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+                if guilds_response.status_code == 200:
+                    user_guilds = guilds_response.json()
+                    # Find the specific guild in the user's guilds
+                    matching_guild = next((g for g in user_guilds if g['id'] == guild_id), None)
+                    if matching_guild:
+                        logger.info(f"Found guild in user's guilds: {matching_guild['name']}")
+                        # Store this info for future use
+                        store_guild_info(guild_id, matching_guild)
+                        # Refresh our result with the latest data
+                        result = get_combined_guild_data(guild_id)
+            except Exception as e:
+                logger.error(f"Error getting user guilds: {e}")
+                # Continue with local data if Discord API fails
         
         logger.info(f"Returning guild data: {result['name']}")
         return jsonify(result)
     except Exception as e:
         logger.error(f"Unhandled error in get_guild: {e}")
         logger.error(traceback.format_exc())
-        return jsonify(get_combined_guild_data(guild_id))
+        # Return a basic fallback response that won't cause errors in the frontend
+        return jsonify({
+            'id': guild_id,
+            'name': 'Unknown Server',
+            'icon': None,
+            'settings': {
+                'prefix': '?',
+                'cogs': ['image', 'security'],
+                'command_count': 0,
+                'mod_actions': 0,
+                'activity': []
+            }
+        })
 
 @app.route('/api/guild/<guild_id>/channels')
 @login_required
 def get_guild_channels(guild_id):
     try:
-        # Try to get channels from bot API first
-        try:
-            bot_channels = get_bot_channels(guild_id)
-            if bot_channels:
-                return jsonify(bot_channels)
-        except Exception as e:
-            logger.error(f"Error getting channels from bot: {e}")
-            
-        # Fall back to Discord API if bot is unavailable
-        headers = {
-            'Authorization': f'Bearer {session["access_token"]}'
-        }
+        # First, check if we have cached channels
+        settings = get_guild_settings(guild_id)
+        if 'cached_channels' in settings and settings['cached_channels']:
+            logger.info(f"Using {len(settings['cached_channels'])} cached channels for guild {guild_id}")
+            return jsonify(settings['cached_channels'])
         
-        response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}/channels', headers=headers)
-        if response.status_code != 200:
-            return jsonify([])
-        
-        channels = response.json()
-        # Filter for text channels only
-        text_channels = [
-            {
-                'id': c['id'],
-                'name': c['name'],
-                'type': c['type'],
-                'position': c['position']
+        # If no cached data, try Discord API
+        if 'access_token' in session:
+            headers = {
+                'Authorization': f'Bearer {session["access_token"]}'
             }
-            for c in channels if c['type'] == 0
-        ]
-        return jsonify(text_channels)
+            
+            response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}/channels', headers=headers)
+            if response.status_code == 200:
+                channels = response.json()
+                # Filter for text channels only
+                text_channels = [
+                    {
+                        'id': c['id'],
+                        'name': c['name'],
+                        'type': c['type'],
+                        'position': c['position']
+                    }
+                    for c in channels if c['type'] == 0
+                ]
+                
+                # Cache the channels for future use
+                settings['cached_channels'] = text_channels
+                update_guild_settings(guild_id, settings)
+                logger.info(f"Cached {len(text_channels)} channels for guild {guild_id}")
+                
+                return jsonify(text_channels)
+            else:
+                logger.warning(f"Failed to get channels from Discord API: {response.status_code}")
+        
+        # If all else fails, return an empty array
+        logger.warning(f"No channels found for guild {guild_id}")
+        return jsonify([])
     except Exception as e:
         logger.error(f"Error getting channels: {e}")
+        logger.error(traceback.format_exc())
         return jsonify([])
 
 @app.route('/api/guild/<guild_id>/activity')
@@ -633,28 +605,6 @@ def get_bot_stats():
 def logout():
     session.clear()
     return redirect(url_for('index'))
-
-@app.route('/api/bot-guilds')
-@login_required
-def get_bot_guilds():
-    """Get guilds directly from the bot API"""
-    try:
-        # Make a direct request to the bot API
-        headers = {
-            'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
-        }
-        
-        response = requests.get('http://45.90.13.151:6150/api/guilds', headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            logger.error(f"Failed to get guilds from bot API: {response.status_code}")
-            return jsonify([])
-    except Exception as e:
-        logger.error(f"Error getting bot guilds: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify([])
 
 if __name__ == '__main__':
     # Get port from environment variable or default to 5000

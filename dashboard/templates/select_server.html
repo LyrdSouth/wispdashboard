@@ -21,47 +21,27 @@
 
 {% block scripts %}
 <script>
-// Bot API details - used as fallback if Discord API fails
-const BOT_API_URL = "http://45.90.13.151:6150/api";
-const BOT_TOKEN = "{{ bot_token }}";
-
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const serverGrid = document.getElementById('serverGrid');
         
-        // Try to get guilds from our API first
+        // Try to get guilds from our API
         let servers = [];
-        let discordServers = [];
         
         try {
             const response = await fetch('/api/guilds');
             if (response.ok) {
-                discordServers = await response.json();
-                console.log('Discord servers:', discordServers);
+                servers = await response.json();
+                console.log('Server data loaded:', servers.length, 'servers');
             } else {
-                console.error('Failed to fetch guilds from Discord API:', response.status);
+                console.error('Failed to fetch guilds:', response.status);
+                serverGrid.innerHTML = '<div class="error-message">Error loading servers. Please try refreshing the page.</div>';
+                return;
             }
-        } catch (discordError) {
-            console.error('Error fetching from Discord API:', discordError);
-        }
-        
-        // If Discord API call failed or returned empty, try direct bot API
-        if (!discordServers.length) {
-            try {
-                console.log('Trying direct bot API...');
-                const directResponse = await fetch('/api/bot-guilds');
-                if (directResponse.ok) {
-                    const botServers = await directResponse.json();
-                    console.log('Bot servers:', botServers);
-                    servers = botServers;
-                } else {
-                    console.error('Failed to fetch bot guilds:', directResponse.status);
-                }
-            } catch (botError) {
-                console.error('Error fetching from bot API:', botError);
-            }
-        } else {
-            servers = discordServers;
+        } catch (error) {
+            console.error('Error fetching guilds:', error);
+            serverGrid.innerHTML = '<div class="error-message">Error loading servers. Please try refreshing the page.</div>';
+            return;
         }
         
         // Clear loading indication
@@ -71,6 +51,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             serverGrid.innerHTML = '<div class="error-message">No available servers found. Make sure the bot is added to your servers.</div>';
             return;
         }
+        
+        // Sort servers by name
+        servers.sort((a, b) => {
+            const nameA = a.name ? a.name.toLowerCase() : 'unknown';
+            const nameB = b.name ? b.name.toLowerCase() : 'unknown';
+            return nameA.localeCompare(nameB);
+        });
         
         servers.forEach(server => {
             const serverCard = document.createElement('div');
