@@ -5,6 +5,9 @@ import requests
 from functools import wraps
 import json
 from werkzeug.middleware.proxy_fix import ProxyFix
+from bot_connection import bot_connection
+import asyncio
+import datetime
 
 # Load environment variables
 load_dotenv()
@@ -144,13 +147,8 @@ def get_guild(guild_id):
     
     guild_data = response.json()
     
-    # Load custom settings from JSON file
-    try:
-        with open('guild_settings.json', 'r') as f:
-            settings = json.load(f)
-            guild_settings = settings.get(str(guild_id), {})
-    except FileNotFoundError:
-        guild_settings = {}
+    # Get custom settings from bot connection
+    guild_settings = bot_connection.get_guild_settings(guild_id)
     
     # Merge Discord data with custom settings
     guild_data.update({
@@ -180,13 +178,8 @@ def get_guild_channels(guild_id):
 @app.route('/api/guild/<guild_id>/activity')
 @login_required
 def get_guild_activity(guild_id):
-    try:
-        with open('guild_activity.json', 'r') as f:
-            activity = json.load(f)
-            guild_activity = activity.get(str(guild_id), [])
-    except FileNotFoundError:
-        guild_activity = []
-    
+    activity = bot_connection.load_activity()
+    guild_activity = activity.get(guild_id, [])
     return jsonify(guild_activity)
 
 @app.route('/api/guild/<guild_id>/prefix', methods=['POST'])
@@ -198,19 +191,13 @@ def update_guild_prefix(guild_id):
     if len(prefix) > 3:
         return jsonify({'error': 'Prefix must be 3 characters or less'}), 400
     
-    try:
-        with open('guild_settings.json', 'r') as f:
-            settings = json.load(f)
-    except FileNotFoundError:
-        settings = {}
+    # Update settings through bot connection
+    settings = bot_connection.get_guild_settings(guild_id)
+    settings['prefix'] = prefix
+    bot_connection.update_guild_settings(guild_id, settings)
     
-    if str(guild_id) not in settings:
-        settings[str(guild_id)] = {}
-    
-    settings[str(guild_id)]['prefix'] = prefix
-    
-    with open('guild_settings.json', 'w') as f:
-        json.dump(settings, f, indent=4)
+    # Notify bot about the change
+    asyncio.run(bot_connection.notify_bot(guild_id, 'prefix_update', {'prefix': prefix}))
     
     return jsonify({'success': True})
 
@@ -220,19 +207,13 @@ def update_guild_cogs(guild_id):
     data = request.get_json()
     cogs = data.get('cogs', [])
     
-    try:
-        with open('guild_settings.json', 'r') as f:
-            settings = json.load(f)
-    except FileNotFoundError:
-        settings = {}
+    # Update settings through bot connection
+    settings = bot_connection.get_guild_settings(guild_id)
+    settings['cogs'] = cogs
+    bot_connection.update_guild_settings(guild_id, settings)
     
-    if str(guild_id) not in settings:
-        settings[str(guild_id)] = {}
-    
-    settings[str(guild_id)]['cogs'] = cogs
-    
-    with open('guild_settings.json', 'w') as f:
-        json.dump(settings, f, indent=4)
+    # Notify bot about the change
+    asyncio.run(bot_connection.notify_bot(guild_id, 'cogs_update', {'cogs': cogs}))
     
     return jsonify({'success': True})
 
@@ -242,30 +223,19 @@ def update_log_channel(guild_id):
     data = request.get_json()
     channel_id = data.get('channel_id')
     
-    try:
-        with open('guild_settings.json', 'r') as f:
-            settings = json.load(f)
-    except FileNotFoundError:
-        settings = {}
+    # Update settings through bot connection
+    settings = bot_connection.get_guild_settings(guild_id)
+    settings['log_channel'] = channel_id
+    bot_connection.update_guild_settings(guild_id, settings)
     
-    if str(guild_id) not in settings:
-        settings[str(guild_id)] = {}
-    
-    settings[str(guild_id)]['log_channel'] = channel_id
-    
-    with open('guild_settings.json', 'w') as f:
-        json.dump(settings, f, indent=4)
+    # Notify bot about the change
+    asyncio.run(bot_connection.notify_bot(guild_id, 'log_channel_update', {'channel_id': channel_id}))
     
     return jsonify({'success': True})
 
 @app.route('/api/stats')
 def get_bot_stats():
-    try:
-        with open('guild_settings.json', 'r') as f:
-            settings = json.load(f)
-    except FileNotFoundError:
-        settings = {}
-    
+    settings = bot_connection.load_settings()
     total_servers = len(settings)
     total_users = sum(guild.get('member_count', 0) for guild in settings.values())
     total_commands = sum(guild.get('command_count', 0) for guild in settings.values())
@@ -275,6 +245,30 @@ def get_bot_stats():
         'users': total_users,
         'commands': total_commands
     })
+
+@app.route('/api/bot/update', methods=['POST'])
+def bot_update():
+    # Verify bot token
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or auth_header != f'Bearer {os.getenv("DISCORD_TOKEN")}':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    data = request.get_json()
+    guild_id = data.get('guild_id')
+    action = data.get('action')
+    action_data = data.get('data')
+    
+    if not all([guild_id, action, action_data]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    # Add activity entry
+    bot_connection.add_activity(guild_id, {
+        'action': action,
+        'data': action_data,
+        'timestamp': str(datetime.datetime.utcnow())
+    })
+    
+    return jsonify({'success': True})
 
 @app.route('/logout')
 def logout():
