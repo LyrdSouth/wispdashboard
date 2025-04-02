@@ -8,14 +8,15 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
 import traceback
 import sys
-from bot_connection import (
+from .bot_connection import (
     get_guild_settings, 
     update_guild_settings, 
     get_combined_guild_data, 
     store_guild_info, 
     get_file_path,
     sync_with_bot,
-    get_bot_settings
+    get_bot_settings,
+    get_bot_channels
 )
 import asyncio
 import datetime

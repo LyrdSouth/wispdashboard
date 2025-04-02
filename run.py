@@ -1,11 +1,17 @@
 import os
+import sys
 import threading
-from main import bot
-from dashboard.app import app
 from dotenv import load_dotenv
+
+# Add the current directory to Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Load environment variables
 load_dotenv()
+
+# Import after setting up path
+from main import bot
+from dashboard.app import app
 
 def run_bot():
     """Run the Discord bot"""
