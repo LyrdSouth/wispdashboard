@@ -23,6 +23,7 @@ def get_file_path(filename):
 # Bot API connection details
 BOT_API_URL = "http://45.90.13.151:6150/api"
 BOT_TOKEN = os.getenv('DISCORD_TOKEN')
+BOT_API_TIMEOUT = 10  # Increased timeout from 5 to 10 seconds
 
 # Ensure settings file exists
 def ensure_settings_file():
@@ -64,7 +65,7 @@ def sync_with_bot(guild_id: str, settings: Dict[str, Any]) -> bool:
             f"{BOT_API_URL}/settings/{guild_id}",
             headers=headers,
             json=settings,
-            timeout=5  # 5 second timeout
+            timeout=BOT_API_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -73,6 +74,12 @@ def sync_with_bot(guild_id: str, settings: Dict[str, Any]) -> bool:
         else:
             print(f"Failed to sync settings with bot: {response.status_code} - {response.text}")
             return False
+    except requests.exceptions.ConnectTimeout:
+        print(f"Connection to bot API timed out after {BOT_API_TIMEOUT} seconds")
+        return False
+    except requests.exceptions.ConnectionError:
+        print(f"Could not connect to bot API at {BOT_API_URL}")
+        return False
     except Exception as e:
         print(f"Error syncing with bot: {e}")
         return False
@@ -88,7 +95,7 @@ def get_bot_settings(guild_id: str) -> Dict[str, Any]:
         response = requests.get(
             f"{BOT_API_URL}/settings/{guild_id}",
             headers=headers,
-            timeout=5  # 5 second timeout
+            timeout=BOT_API_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -96,6 +103,12 @@ def get_bot_settings(guild_id: str) -> Dict[str, Any]:
         else:
             print(f"Failed to get settings from bot: {response.status_code} - {response.text}")
             return {}
+    except requests.exceptions.ConnectTimeout:
+        print(f"Connection to bot API timed out after {BOT_API_TIMEOUT} seconds")
+        return {}
+    except requests.exceptions.ConnectionError:
+        print(f"Could not connect to bot API at {BOT_API_URL}")
+        return {}
     except Exception as e:
         print(f"Error getting settings from bot: {e}")
         return {}
@@ -360,7 +373,7 @@ def get_bot_channels(guild_id: str) -> list:
         response = requests.get(
             f"{BOT_API_URL}/channels/{guild_id}",
             headers=headers,
-            timeout=5  # 5 second timeout
+            timeout=BOT_API_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -368,6 +381,12 @@ def get_bot_channels(guild_id: str) -> list:
         else:
             print(f"Failed to get channels from bot: {response.status_code} - {response.text}")
             return []
+    except requests.exceptions.ConnectTimeout:
+        print(f"Connection to bot API timed out after {BOT_API_TIMEOUT} seconds")
+        return []
+    except requests.exceptions.ConnectionError:
+        print(f"Could not connect to bot API at {BOT_API_URL}")
+        return []
     except Exception as e:
         print(f"Error getting channels from bot: {e}")
         return [] 

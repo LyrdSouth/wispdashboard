@@ -112,17 +112,74 @@ def callback():
 @app.route('/select-server')
 @login_required
 def select_server():
-    headers = {
-        'Authorization': f'Bearer {session["access_token"]}'
-    }
-    
-    response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
-    if response.status_code != 200:
+    if 'access_token' not in session:
+        logger.warning("No access token in session, redirecting to login")
         return redirect(url_for('login'))
     
-    guilds = response.json()
+    discord_guilds = []
     
-    # Pass bot token securely to the template for direct API calls if needed
+    # Try getting guilds from Discord first
+    try:
+        headers = {
+            'Authorization': f'Bearer {session["access_token"]}'
+        }
+        
+        response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+        if response.status_code == 401:
+            logger.warning("Access token expired, redirecting to login")
+            session.clear()
+            return redirect(url_for('login'))
+            
+        if response.status_code == 200:
+            discord_guilds = response.json()
+            logger.info(f"Got {len(discord_guilds)} guilds from Discord API")
+        else:
+            logger.error(f"Failed to fetch guilds from Discord API: {response.status_code}")
+    except Exception as e:
+        logger.error(f"Error fetching Discord guilds: {e}")
+    
+    # Get bot guilds as a backup (or to merge with Discord guilds)
+    bot_guilds = []
+    try:
+        bot_headers = {
+            'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
+        }
+        
+        bot_response = requests.get('http://45.90.13.151:6150/api/guilds', 
+                                 headers=bot_headers, 
+                                 timeout=10)
+        
+        if bot_response.status_code == 200:
+            bot_guilds = bot_response.json()
+            logger.info(f"Got {len(bot_guilds)} guilds from bot API")
+        else:
+            logger.error(f"Failed to fetch guilds from bot API: {bot_response.status_code}")
+    except Exception as e:
+        logger.error(f"Error fetching bot guilds: {e}")
+    
+    # If we failed to get Discord guilds but have bot guilds
+    if not discord_guilds and bot_guilds:
+        guilds = bot_guilds
+        logger.info("Using bot guilds only")
+    # If we have guilds from both sources, merge them
+    elif discord_guilds and bot_guilds:
+        # Create a map of guild IDs from Discord for quick lookups
+        discord_guild_map = {g['id']: g for g in discord_guilds}
+        
+        # Add bot guilds if they're not already in Discord guilds
+        for bot_guild in bot_guilds:
+            if bot_guild['id'] not in discord_guild_map:
+                discord_guilds.append(bot_guild)
+                logger.info(f"Added guild from bot API: {bot_guild.get('name', 'Unknown')}")
+        
+        guilds = discord_guilds
+        logger.info(f"Using merged guilds: {len(guilds)} total")
+    else:
+        # Just use whatever we got from Discord
+        guilds = discord_guilds
+        logger.info("Using Discord guilds only")
+    
+    # Pass bot token and guild list to the template
     bot_token = os.getenv('DISCORD_TOKEN')
     
     return render_template('select_server.html', guilds=guilds, bot_token=bot_token)
@@ -134,17 +191,59 @@ def dashboard():
     if not guild_id:
         return redirect(url_for('select_server'))
     
-    # Verify user has access to this guild
-    headers = {
-        'Authorization': f'Bearer {session["access_token"]}'
-    }
-    
-    response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
-    if response.status_code != 200:
+    # Check if we have a valid access token
+    if 'access_token' not in session:
+        logger.warning("No access token in session, redirecting to login")
         return redirect(url_for('login'))
     
-    guilds = response.json()
-    if not any(g['id'] == guild_id for g in guilds):
+    # Verify user has access to this guild
+    try:
+        headers = {
+            'Authorization': f'Bearer {session["access_token"]}'
+        }
+        
+        response = requests.get(f'{DISCORD_API_ENDPOINT}/users/@me/guilds', headers=headers)
+        if response.status_code == 401:
+            logger.warning("Access token expired, redirecting to login")
+            # Clear the session and redirect to login
+            session.clear()
+            return redirect(url_for('login'))
+        
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch user guilds: {response.status_code}")
+            guilds = []
+        else:
+            guilds = response.json()
+    except Exception as e:
+        logger.error(f"Error verifying user guild access: {e}")
+        guilds = []
+    
+    # Check if user has access to this guild - first from Discord, then from bot if Discord fails
+    has_access = any(g['id'] == guild_id for g in guilds)
+    
+    # If user doesn't have access according to Discord, check if the bot has the guild
+    if not has_access and guilds:  # Only if Discord returned results but guild not found
+        logger.warning(f"User doesn't appear to have access to guild {guild_id} via Discord API")
+        try:
+            # Try to get guild info from bot API
+            bot_headers = {
+                'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
+            }
+            
+            # Check if the bot has this guild
+            bot_response = requests.get(f'http://45.90.13.151:6150/api/settings/{guild_id}', 
+                                      headers=bot_headers, 
+                                      timeout=10)
+            
+            if bot_response.status_code == 200:
+                logger.info(f"Bot has access to guild {guild_id}, allowing access")
+                has_access = True
+        except Exception as bot_error:
+            logger.error(f"Error checking bot access to guild: {bot_error}")
+    
+    # If user still doesn't have access after all checks, redirect
+    if not has_access and guilds:  # Only enforce if we got guild data from somewhere
+        logger.warning(f"User doesn't have access to guild {guild_id}, redirecting")
         return redirect(url_for('select_server'))
     
     # Try to get guild data from bot first
@@ -156,7 +255,7 @@ def dashboard():
         
         bot_response = requests.get(f'http://45.90.13.151:6150/api/settings/{guild_id}', 
                                    headers=bot_headers, 
-                                   timeout=5)
+                                   timeout=10)
         
         if bot_response.status_code == 200:
             bot_settings = bot_response.json()
@@ -165,7 +264,7 @@ def dashboard():
             # Try to get guild data from bot API too
             bot_guilds_response = requests.get('http://45.90.13.151:6150/api/guilds', 
                                              headers=bot_headers, 
-                                             timeout=5)
+                                             timeout=10)
             
             if bot_guilds_response.status_code == 200:
                 bot_guilds = bot_guilds_response.json()
@@ -245,7 +344,8 @@ def get_guild(guild_id):
         except Exception as settings_error:
             logger.error(f"Error getting guild settings: {settings_error}")
             logger.error(traceback.format_exc())
-            settings = {}  # Use empty settings if there's an error
+            settings = get_guild_settings(guild_id)  # Try local settings on error
+            logger.debug(f"Using local settings: {settings}")
         
         # Get guild info from Discord
         try:
@@ -257,10 +357,43 @@ def get_guild(guild_id):
             response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
             logger.debug(f"Discord API response status: {response.status_code}")
             
+            if response.status_code == 401:
+                logger.warning("Discord token is unauthorized (401). Token may have expired.")
+                # Optional: you could redirect to re-auth here with:
+                # return jsonify({'error': 'Session expired', 'redirect': '/login'}), 401
+                # Instead, we'll use fallback data
+                
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch guild from Discord API: {response.status_code}")
-                # Try to get guild info from settings if available
-                if settings and 'name' in settings:
+                # Try to get guild info from bot API as fallback
+                try:
+                    logger.debug("Trying to get guild info from bot API")
+                    bot_headers = {
+                        'Authorization': f'Bearer {os.getenv("DISCORD_TOKEN")}'
+                    }
+                    bot_response = requests.get(f'http://45.90.13.151:6150/api/guilds', 
+                                             headers=bot_headers, 
+                                             timeout=10)
+                    
+                    if bot_response.status_code == 200:
+                        bot_guilds = bot_response.json()
+                        matching_guild = next((g for g in bot_guilds if g['id'] == guild_id), None)
+                        
+                        if matching_guild:
+                            logger.info(f"Got guild info from bot API: {matching_guild['name']}")
+                            return jsonify({
+                                'id': guild_id,
+                                'name': matching_guild.get('name', 'Unknown Server'),
+                                'icon': matching_guild.get('icon'),
+                                'owner_id': matching_guild.get('owner_id'),
+                                'member_count': matching_guild.get('member_count', 0),
+                                'settings': settings
+                            })
+                except Exception as bot_api_error:
+                    logger.error(f"Error getting guild info from bot API: {bot_api_error}")
+                
+                # If all else fails, use the settings name if available
+                if settings and settings.get('name'):
                     return jsonify({
                         'id': guild_id,
                         'name': settings.get('name', 'Unknown Server'),
