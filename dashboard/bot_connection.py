@@ -7,6 +7,7 @@ import aiohttp
 import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -18,6 +19,10 @@ settings_cache = {}
 def get_file_path(filename):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, filename)
+
+# Bot API connection details
+BOT_API_URL = "http://45.90.13.151:6150/api"
+BOT_TOKEN = os.getenv('DISCORD_TOKEN')
 
 # Ensure settings file exists
 def ensure_settings_file():
@@ -45,12 +50,70 @@ class BotConnection:
 # Create an instance of BotConnection for set_bot
 set_bot = BotConnection()
 
+# Direct connection to the bot API
+def sync_with_bot(guild_id: str, settings: Dict[str, Any]) -> bool:
+    """Synchronize settings with the bot"""
+    try:
+        headers = {
+            'Authorization': f'Bearer {BOT_TOKEN}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Send settings to bot API
+        response = requests.post(
+            f"{BOT_API_URL}/settings/{guild_id}",
+            headers=headers,
+            json=settings,
+            timeout=5  # 5 second timeout
+        )
+        
+        if response.status_code == 200:
+            print(f"Successfully synced settings for guild {guild_id} with bot")
+            return True
+        else:
+            print(f"Failed to sync settings with bot: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error syncing with bot: {e}")
+        return False
+
+# Get settings from bot directly
+def get_bot_settings(guild_id: str) -> Dict[str, Any]:
+    """Get settings directly from the bot"""
+    try:
+        headers = {
+            'Authorization': f'Bearer {BOT_TOKEN}'
+        }
+        
+        response = requests.get(
+            f"{BOT_API_URL}/settings/{guild_id}",
+            headers=headers,
+            timeout=5  # 5 second timeout
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Failed to get settings from bot: {response.status_code} - {response.text}")
+            return {}
+    except Exception as e:
+        print(f"Error getting settings from bot: {e}")
+        return {}
+
 def get_guild_settings(guild_id: str) -> Dict[str, Any]:
     """Get settings for a specific guild"""
     if guild_id is None:
         return {}
     
     try:
+        # First try to get settings from the bot
+        bot_settings = get_bot_settings(guild_id)
+        if bot_settings:
+            # Update local cache with bot settings
+            settings_cache[guild_id] = bot_settings
+            return bot_settings
+        
+        # Fall back to local cache/file if bot is unavailable
         if guild_id not in settings_cache:
             # Load settings from file
             try:
@@ -161,13 +224,15 @@ def get_mod_action_count(guild_id):
 def update_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
     """Update settings for a specific guild"""
     try:
-        # Ensure settings file exists
-        ensure_settings_file()
-        
         # Update cache
         settings_cache[guild_id] = settings.copy()
         
-        # Load existing settings
+        # Try to sync with bot first
+        if sync_with_bot(guild_id, settings):
+            return True
+            
+        # Fall back to local file if bot sync fails
+        # Save to local file as backup
         try:
             settings_file = get_file_path('settings.json')
             with open(settings_file, 'r') as f:
@@ -282,4 +347,27 @@ def add_activity(guild_id: str, activity_data: Dict[str, Any]):
         
         update_guild_settings(guild_id, settings)
     except Exception as e:
-        print(f"Error adding activity: {e}") 
+        print(f"Error adding activity: {e}")
+
+# Get channels from bot directly
+def get_bot_channels(guild_id: str) -> list:
+    """Get channels directly from the bot"""
+    try:
+        headers = {
+            'Authorization': f'Bearer {BOT_TOKEN}'
+        }
+        
+        response = requests.get(
+            f"{BOT_API_URL}/channels/{guild_id}",
+            headers=headers,
+            timeout=5  # 5 second timeout
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Failed to get channels from bot: {response.status_code} - {response.text}")
+            return []
+    except Exception as e:
+        print(f"Error getting channels from bot: {e}")
+        return [] 

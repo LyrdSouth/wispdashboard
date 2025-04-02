@@ -8,7 +8,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
 import traceback
 import sys
-from bot_connection import get_guild_settings, update_guild_settings
+from bot_connection import get_guild_settings, update_guild_settings, get_bot_settings, get_bot_channels, sync_with_bot
 import asyncio
 import datetime
 
@@ -189,10 +189,14 @@ def get_guilds():
 def get_guild(guild_id):
     logger.info(f"Getting guild {guild_id}")
     try:
-        # Get guild settings
+        # Get guild settings from bot first
         try:
-            logger.debug(f"Fetching settings for guild {guild_id}")
-            settings = get_guild_settings(guild_id)
+            logger.debug(f"Fetching settings for guild {guild_id} from bot")
+            settings = get_bot_settings(guild_id)
+            if not settings:
+                # Fall back to local settings if bot is unavailable
+                logger.debug(f"Bot API unavailable, using local settings")
+                settings = get_guild_settings(guild_id)
             logger.debug(f"Got settings: {settings}")
         except Exception as settings_error:
             logger.error(f"Error getting guild settings: {settings_error}")
@@ -211,12 +215,23 @@ def get_guild(guild_id):
             
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch guild from Discord API: {response.status_code}")
-                return jsonify({
-                    'id': guild_id,
-                    'name': 'Unknown Server',
-                    'icon': None,
-                    'settings': settings
-                })
+                # Try to get guild info from settings if available
+                if settings and 'name' in settings:
+                    return jsonify({
+                        'id': guild_id,
+                        'name': settings.get('name', 'Unknown Server'),
+                        'icon': settings.get('icon'),
+                        'owner_id': settings.get('owner_id'),
+                        'member_count': settings.get('member_count', 0),
+                        'settings': settings
+                    })
+                else:
+                    return jsonify({
+                        'id': guild_id,
+                        'name': 'Unknown Server',
+                        'icon': None,
+                        'settings': settings
+                    })
             
             guild_data = response.json()
             logger.debug(f"Got guild data: {guild_data}")
@@ -262,6 +277,15 @@ def get_guild(guild_id):
 @login_required
 def get_guild_channels(guild_id):
     try:
+        # Try to get channels from bot API first
+        try:
+            bot_channels = get_bot_channels(guild_id)
+            if bot_channels:
+                return jsonify(bot_channels)
+        except Exception as e:
+            logger.error(f"Error getting channels from bot: {e}")
+            
+        # Fall back to Discord API if bot is unavailable
         headers = {
             'Authorization': f'Bearer {session["access_token"]}'
         }
@@ -283,7 +307,7 @@ def get_guild_channels(guild_id):
         ]
         return jsonify(text_channels)
     except Exception as e:
-        print(f"Error getting channels: {e}")
+        logger.error(f"Error getting channels: {e}")
         return jsonify([])
 
 @app.route('/api/guild/<guild_id>/activity')
@@ -344,9 +368,13 @@ def update_guild_prefix(guild_id):
         })
         settings['activity'] = settings['activity'][:50]  # Keep only last 50
         
-        # Save settings
-        success = update_guild_settings(guild_id, settings)
+        # Save settings to bot directly
+        success = sync_with_bot(guild_id, settings)
         
+        # If bot sync fails, try local update
+        if not success:
+            success = update_guild_settings(guild_id, settings)
+            
         if not success:
             return jsonify({'error': 'Failed to save prefix'}), 500
             
@@ -364,10 +392,6 @@ def update_guild_cogs(guild_id):
         data = request.get_json()
         cogs = data.get('cogs', [])
         
-        # Validate cogs
-        valid_cogs = ['image', 'security']
-        cogs = [cog for cog in cogs if cog in valid_cogs]
-        
         # Get current settings
         settings = get_guild_settings(guild_id)
         
@@ -381,18 +405,22 @@ def update_guild_cogs(guild_id):
         
         settings['activity'].insert(0, {
             'timestamp': timestamp,
-            'action': 'cogs_update',
+            'action': 'features_update',
             'data': {'cogs': cogs}
         })
         settings['activity'] = settings['activity'][:50]  # Keep only last 50
         
-        # Save settings
-        success = update_guild_settings(guild_id, settings)
+        # Save settings to bot directly
+        success = sync_with_bot(guild_id, settings)
         
+        # If bot sync fails, try local update
+        if not success:
+            success = update_guild_settings(guild_id, settings)
+            
         if not success:
             return jsonify({'error': 'Failed to save features'}), 500
             
-        logger.info(f"Guild {guild_id} cogs updated: {cogs}")
+        logger.info(f"Guild {guild_id} cogs updated to: {cogs}")
         return jsonify({'success': True, 'cogs': cogs})
     except Exception as e:
         logger.error(f"Error updating cogs: {e}")
@@ -401,7 +429,7 @@ def update_guild_cogs(guild_id):
 
 @app.route('/api/guild/<guild_id>/log-channel', methods=['POST'])
 @login_required
-def update_log_channel(guild_id):
+def update_guild_log_channel(guild_id):
     try:
         data = request.get_json()
         channel_id = data.get('channel_id')
@@ -424,14 +452,18 @@ def update_log_channel(guild_id):
         })
         settings['activity'] = settings['activity'][:50]  # Keep only last 50
         
-        # Save settings
-        success = update_guild_settings(guild_id, settings)
+        # Save settings to bot directly
+        success = sync_with_bot(guild_id, settings)
         
+        # If bot sync fails, try local update
+        if not success:
+            success = update_guild_settings(guild_id, settings)
+            
         if not success:
             return jsonify({'error': 'Failed to save log channel'}), 500
             
         logger.info(f"Guild {guild_id} log channel updated to: {channel_id}")
-        return jsonify({'success': True, 'channel_id': channel_id})
+        return jsonify({'success': True, 'log_channel': channel_id})
     except Exception as e:
         logger.error(f"Error updating log channel: {e}")
         logger.error(traceback.format_exc())
