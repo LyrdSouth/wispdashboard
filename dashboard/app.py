@@ -5,10 +5,9 @@ import requests
 from functools import wraps
 import json
 from werkzeug.middleware.proxy_fix import ProxyFix
-from bot_connection import set_bot, get_guild_settings, update_guild_settings, increment_command_count, increment_mod_action
+from bot_connection import get_guild_settings, update_guild_settings
 import asyncio
 import datetime
-import discord
 
 # Load environment variables
 load_dotenv()
@@ -155,19 +154,34 @@ def get_guild(guild_id):
         
         response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
         if response.status_code != 200:
-            return jsonify({'error': 'Failed to fetch guild data'}), 500
+            return jsonify({
+                'id': guild_id,
+                'name': 'Unknown Server',
+                'icon': None,
+                'settings': settings
+            })
         
         guild_data = response.json()
         
         # Merge Discord data with settings
-        guild_data.update({
+        result = {
+            'id': guild_data.get('id', guild_id),
+            'name': guild_data.get('name', 'Unknown Server'),
+            'icon': guild_data.get('icon'),
+            'owner_id': guild_data.get('owner_id'),
+            'member_count': guild_data.get('approximate_member_count', 0),
             'settings': settings
-        })
+        }
         
-        return jsonify(guild_data)
+        return jsonify(result)
     except Exception as e:
         print(f"Error getting guild: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'id': guild_id,
+            'name': 'Error Loading Server',
+            'icon': None,
+            'settings': get_guild_settings(guild_id) 
+        })
 
 @app.route('/api/guild/<guild_id>/channels')
 @login_required
@@ -179,15 +193,23 @@ def get_guild_channels(guild_id):
         
         response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}/channels', headers=headers)
         if response.status_code != 200:
-            return jsonify({'error': 'Failed to fetch channels'}), 500
+            return jsonify([])
         
         channels = response.json()
         # Filter for text channels only
-        text_channels = [c for c in channels if c['type'] == 0]
+        text_channels = [
+            {
+                'id': c['id'],
+                'name': c['name'],
+                'type': c['type'],
+                'position': c['position']
+            }
+            for c in channels if c['type'] == 0
+        ]
         return jsonify(text_channels)
     except Exception as e:
         print(f"Error getting channels: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify([])
 
 @app.route('/api/guild/<guild_id>/activity')
 @login_required
@@ -228,13 +250,23 @@ def update_guild_prefix(guild_id):
     if len(prefix) > 3:
         return jsonify({'error': 'Prefix must be 3 characters or less'}), 400
     
-    # Update settings through bot connection
+    # Update settings
     settings = get_guild_settings(guild_id)
     settings['prefix'] = prefix
-    update_guild_settings(guild_id, settings)
     
-    # Notify bot about the change
-    asyncio.run(set_bot.notify_bot(guild_id, 'prefix_update', {'prefix': prefix}))
+    # Add activity entry
+    timestamp = datetime.datetime.now().isoformat()
+    if 'activity' not in settings:
+        settings['activity'] = []
+    
+    settings['activity'].insert(0, {
+        'timestamp': timestamp,
+        'action': 'prefix_update',
+        'data': {'prefix': prefix}
+    })
+    settings['activity'] = settings['activity'][:50]  # Keep only last 50
+    
+    update_guild_settings(guild_id, settings)
     
     return jsonify({'success': True})
 
@@ -244,13 +276,23 @@ def update_guild_cogs(guild_id):
     data = request.get_json()
     cogs = data.get('cogs', [])
     
-    # Update settings through bot connection
+    # Update settings
     settings = get_guild_settings(guild_id)
     settings['cogs'] = cogs
-    update_guild_settings(guild_id, settings)
     
-    # Notify bot about the change
-    asyncio.run(set_bot.notify_bot(guild_id, 'cogs_update', {'cogs': cogs}))
+    # Add activity entry
+    timestamp = datetime.datetime.now().isoformat()
+    if 'activity' not in settings:
+        settings['activity'] = []
+    
+    settings['activity'].insert(0, {
+        'timestamp': timestamp,
+        'action': 'cogs_update',
+        'data': {'cogs': cogs}
+    })
+    settings['activity'] = settings['activity'][:50]  # Keep only last 50
+    
+    update_guild_settings(guild_id, settings)
     
     return jsonify({'success': True})
 
@@ -260,52 +302,58 @@ def update_log_channel(guild_id):
     data = request.get_json()
     channel_id = data.get('channel_id')
     
-    # Update settings through bot connection
+    # Update settings
     settings = get_guild_settings(guild_id)
     settings['log_channel'] = channel_id
-    update_guild_settings(guild_id, settings)
     
-    # Notify bot about the change
-    asyncio.run(set_bot.notify_bot(guild_id, 'log_channel_update', {'channel_id': channel_id}))
+    # Add activity entry
+    timestamp = datetime.datetime.now().isoformat()
+    if 'activity' not in settings:
+        settings['activity'] = []
+    
+    settings['activity'].insert(0, {
+        'timestamp': timestamp,
+        'action': 'log_channel_update',
+        'data': {'channel_id': channel_id}
+    })
+    settings['activity'] = settings['activity'][:50]  # Keep only last 50
+    
+    update_guild_settings(guild_id, settings)
     
     return jsonify({'success': True})
 
 @app.route('/api/stats')
 def get_bot_stats():
-    settings = get_guild_settings(None)
-    total_servers = len(settings)
-    total_users = sum(guild.get('member_count', 0) for guild in settings.values())
-    total_commands = sum(guild.get('command_count', 0) for guild in settings.values())
-    
-    return jsonify({
-        'servers': total_servers,
-        'users': total_users,
-        'commands': total_commands
-    })
-
-@app.route('/api/bot/update', methods=['POST'])
-def bot_update():
-    # Verify bot token
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or auth_header != f'Bearer {os.getenv("DISCORD_TOKEN")}':
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    data = request.get_json()
-    guild_id = data.get('guild_id')
-    action = data.get('action')
-    action_data = data.get('data')
-    
-    if not all([guild_id, action, action_data]):
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    # Add activity entry
-    set_bot.add_activity(guild_id, {
-        'action': action,
-        'data': action_data,
-        'timestamp': str(datetime.datetime.utcnow())
-    })
-    
-    return jsonify({'success': True})
+    # Get stats from all guilds
+    try:
+        total_servers = 0
+        total_commands = 0
+        total_mod_actions = 0
+        
+        # Load all settings
+        try:
+            with open('settings.json', 'r') as f:
+                all_settings = json.load(f)
+                total_servers = len(all_settings)
+                
+                for guild_id, settings in all_settings.items():
+                    total_commands += settings.get('command_count', 0)
+                    total_mod_actions += settings.get('mod_actions', 0)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        
+        return jsonify({
+            'servers': total_servers,
+            'commands': total_commands,
+            'modActions': total_mod_actions
+        })
+    except Exception as e:
+        print(f"Error getting stats: {e}")
+        return jsonify({
+            'servers': 0,
+            'commands': 0,
+            'modActions': 0
+        })
 
 @app.route('/logout')
 def logout():

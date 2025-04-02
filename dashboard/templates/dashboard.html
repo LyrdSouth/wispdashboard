@@ -114,33 +114,41 @@
         try {
             const response = await fetch(`/api/guild/${guildId}`);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`Failed to fetch server info: ${response.status}`);
             }
+            
             const data = await response.json();
             
-            if (!data || !data.settings) {
-                console.error('Invalid server data:', data);
-                return;
-            }
-
-            settings = data.settings;
-            
-            // Update server info
+            // Update server info in UI
             const serverName = document.getElementById('server-name');
             const serverIcon = document.getElementById('server-icon');
-            if (serverName) serverName.textContent = data.name;
-            if (serverIcon && data.icon) serverIcon.src = data.icon;
+            if (serverName) serverName.textContent = data.name || 'Unknown Server';
+            if (serverIcon && data.icon) {
+                serverIcon.src = `https://cdn.discordapp.com/icons/${data.id}/${data.icon}.png`;
+            } else {
+                serverIcon.src = '/static/img/default-server.png';
+            }
+            
+            // Enable buttons and forms now that data is loaded
+            document.querySelectorAll('.settings-form').forEach(form => {
+                form.classList.remove('disabled');
+            });
+            
+            // Show success message
+            showNotification('Server info loaded successfully', 'success');
             
             // Update prefix
             const prefixInput = document.getElementById('prefix-input');
-            if (prefixInput && settings.prefix) {
-                prefixInput.value = settings.prefix;
+            if (prefixInput && data.settings && data.settings.prefix) {
+                prefixInput.value = data.settings.prefix;
             }
             
             // Update enabled features
-            if (settings.cogs) {
-                settings.cogs.forEach(cog => {
-                    const checkbox = document.querySelector(`input[name="cog"][value="${cog}"]`);
+            if (data.settings && data.settings.cogs) {
+                const cogsForm = document.getElementById('cogs-form');
+                const cogs = data.settings.cogs;
+                cogs.forEach(cog => {
+                    const checkbox = cogsForm.querySelector(`input[name="cog"][value="${cog}"]`);
                     if (checkbox) checkbox.checked = true;
                 });
             }
@@ -149,10 +157,14 @@
             await loadChannels(guildId);
             
             // Update stats
-            updateStats(settings);
+            updateStats(data.settings);
         } catch (error) {
             console.error('Error loading server settings:', error);
-            showNotification('Error loading server settings. Please try again.', 'error');
+            showNotification('Failed to load server settings: ' + error.message, 'error');
+            
+            // Show default/fallback UI
+            document.getElementById('server-name').textContent = 'Error Loading Server';
+            document.getElementById('server-icon').src = '/static/img/default-server.png';
         }
     }
 
@@ -161,19 +173,25 @@
         try {
             const response = await fetch(`/api/guild/${guildId}/channels`);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`Failed to fetch channels: ${response.status}`);
             }
-            const channels = await response.json();
             
-            if (!Array.isArray(channels)) {
-                console.error('Channels data is not an array:', channels);
-                return;
+            const data = await response.json();
+            
+            // Verify data is an array
+            if (!Array.isArray(data)) {
+                console.error('Channels data is not an array:', data);
+                throw new Error('Invalid channel data format');
             }
-
+            
+            // Sort channels by position
+            const sortedChannels = [...data].sort((a, b) => a.position - b.position);
+            
+            // Populate channel dropdown
             const channelSelect = document.getElementById('channel-select');
             channelSelect.innerHTML = '<option value="">Select a channel</option>';
             
-            channels.forEach(channel => {
+            sortedChannels.forEach(channel => {
                 if (channel.type === 0) { // Text channels only
                     const option = document.createElement('option');
                     option.value = channel.id;
@@ -183,12 +201,16 @@
             });
 
             // Set the selected channel if it exists in settings
-            if (settings && settings.log_channel) {
-                channelSelect.value = settings.log_channel;
+            if (data.settings && data.settings.log_channel) {
+                channelSelect.value = data.settings.log_channel;
             }
         } catch (error) {
             console.error('Error loading channels:', error);
-            showNotification('Error loading channels. Please try again.', 'error');
+            showNotification('Failed to load channels: ' + error.message, 'error');
+            
+            // Clear dropdown with just the default option
+            const channelSelect = document.getElementById('channel-select');
+            channelSelect.innerHTML = '<option value="">No channels available</option>';
         }
     }
 
@@ -312,20 +334,31 @@
     });
 
     // Show notification
-    function showNotification(message, type = 'success') {
+    function showNotification(message, type = 'info') {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = message;
         
-        document.body.appendChild(notification);
+        const container = document.getElementById('notification-container');
+        if (!container) {
+            // Create container if it doesn't exist
+            const newContainer = document.createElement('div');
+            newContainer.id = 'notification-container';
+            newContainer.style.position = 'fixed';
+            newContainer.style.top = '20px';
+            newContainer.style.right = '20px';
+            newContainer.style.zIndex = '1000';
+            document.body.appendChild(newContainer);
+            newContainer.appendChild(notification);
+        } else {
+            container.appendChild(notification);
+        }
         
+        // Auto-remove after 5 seconds
         setTimeout(() => {
-            notification.classList.add('show');
-            setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
-        }, 100);
+            notification.classList.add('fade-out');
+            setTimeout(() => notification.remove(), 500);
+        }, 5000);
     }
 </script>
 {% endblock %} 

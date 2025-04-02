@@ -11,14 +11,18 @@ from typing import Optional, Dict, Any
 # Load environment variables
 load_dotenv()
 
-# Bot instance
-bot: Optional[commands.Bot] = None
-settings_cache: Dict[str, Dict[str, Any]] = {}
+# Settings cache
+settings_cache = {}
 
-def set_bot(bot_instance: commands.Bot):
-    """Set the bot instance for the dashboard to use"""
-    global bot
-    bot = bot_instance
+class BotConnection:
+    def __init__(self):
+        self.bot_token = os.getenv('DISCORD_TOKEN')
+        self.dashboard_url = os.getenv('DASHBOARD_URL', 'https://wispbot.site')
+        self._settings_cache = {}
+        self._bot = None
+
+# Create an instance of BotConnection for set_bot
+set_bot = BotConnection()
 
 def get_guild_settings(guild_id: str) -> Dict[str, Any]:
     """Get settings for a specific guild"""
@@ -29,11 +33,34 @@ def get_guild_settings(guild_id: str) -> Dict[str, Any]:
         # Load settings from file
         try:
             with open('settings.json', 'r') as f:
-                settings_cache.update(json.load(f))
+                all_settings = json.load(f)
+                settings_cache.update(all_settings)
         except FileNotFoundError:
+            # Create an empty settings file
+            with open('settings.json', 'w') as f:
+                json.dump({}, f)
             settings_cache[guild_id] = {}
         except json.JSONDecodeError:
+            # Reset the file if it's corrupted
+            with open('settings.json', 'w') as f:
+                json.dump({}, f)
             settings_cache[guild_id] = {}
+    
+    # Initialize with defaults if not exist
+    if guild_id not in settings_cache:
+        settings_cache[guild_id] = {}
+    
+    # Ensure required fields exist
+    if 'prefix' not in settings_cache[guild_id]:
+        settings_cache[guild_id]['prefix'] = '?'
+    if 'cogs' not in settings_cache[guild_id]:
+        settings_cache[guild_id]['cogs'] = ['image', 'security']
+    if 'command_count' not in settings_cache[guild_id]:
+        settings_cache[guild_id]['command_count'] = 0
+    if 'mod_actions' not in settings_cache[guild_id]:
+        settings_cache[guild_id]['mod_actions'] = 0
+    if 'activity' not in settings_cache[guild_id]:
+        settings_cache[guild_id]['activity'] = []
     
     return settings_cache.get(guild_id, {})
 
@@ -130,39 +157,73 @@ def increment_mod_action(guild_id: str):
     settings['mod_actions'] = settings.get('mod_actions', 0) + 1
     update_guild_settings(guild_id, settings)
 
-async def notify_bot(guild_id: str, action: str, data: Dict[str, Any]):
-    """Notify the bot about a settings change."""
-    if bot is None:
-        return
-    
+async def notify_bot(self, guild_id: str, action: str, data: Dict[str, Any]):
+    """Log action in server's activity feed"""
     try:
-        guild = bot.get_guild(int(guild_id))
-        if guild:
-            # Add activity entry
-            settings = get_guild_settings(guild_id)
-            activity = settings.get('activity', [])
-            activity.append({
-                'timestamp': datetime.utcnow().isoformat(),
-                'action': action,
-                'data': data
-            })
-            settings['activity'] = activity[-10:]  # Keep last 10 activities
-            update_guild_settings(guild_id, settings)
-            
-            # Notify bot about the change
-            await bot.get_channel(int(settings.get('log_channel', 0))).send(
-                f"🔄 Settings updated: {action}"
-            )
+        settings = get_guild_settings(guild_id)
+        
+        # Add to activity history
+        timestamp = datetime.datetime.now().isoformat()
+        activity = {
+            'timestamp': timestamp,
+            'action': action,
+            'data': data
+        }
+        
+        if 'activity' not in settings:
+            settings['activity'] = []
+        
+        settings['activity'].insert(0, activity)
+        # Keep only the most recent 50 activities
+        settings['activity'] = settings['activity'][:50]
+        
+        # Apply the requested change to settings
+        if action == 'prefix_update':
+            settings['prefix'] = data.get('prefix', '?')
+        elif action == 'cogs_update':
+            settings['cogs'] = data.get('cogs', [])
+        elif action == 'log_channel_update':
+            settings['log_channel'] = data.get('channel_id')
+        
+        # Save updated settings
+        update_guild_settings(guild_id, settings)
+        
+        # Try to send a notification in the log channel if one is set
+        log_channel_id = settings.get('log_channel')
+        if log_channel_id and self._bot:
+            try:
+                channel = self._bot.get_channel(int(log_channel_id))
+                if channel:
+                    action_text = {
+                        'prefix_update': f"Prefix updated to `{data.get('prefix')}`",
+                        'cogs_update': f"Enabled features updated: {', '.join(data.get('cogs', []))}",
+                        'log_channel_update': f"Log channel updated"
+                    }.get(action, f"Settings updated: {action}")
+                    
+                    embed = discord.Embed(
+                        title="Dashboard Update",
+                        description=action_text,
+                        color=discord.Color.blue(),
+                        timestamp=datetime.datetime.now()
+                    )
+                    await channel.send(embed=embed)
+            except Exception as e:
+                print(f"Error sending log message: {e}")
+        
+        return True
     except Exception as e:
-        print(f"Error notifying bot: {e}")
+        print(f"Error logging activity: {e}")
+        return False
 
 def add_activity(guild_id: str, activity_data: Dict[str, Any]):
-    """Add an activity entry to the guild's settings."""
+    """Add an activity entry to the guild's settings"""
     settings = get_guild_settings(guild_id)
-    activity = settings.get('activity', [])
-    activity.append({
-        'timestamp': datetime.utcnow().isoformat(),
-        **activity_data
-    })
-    settings['activity'] = activity[-10:]  # Keep last 10 activities
+    
+    if 'activity' not in settings:
+        settings['activity'] = []
+    
+    settings['activity'].insert(0, activity_data)
+    # Keep only the most recent 50 activities
+    settings['activity'] = settings['activity'][:50]
+    
     update_guild_settings(guild_id, settings) 
