@@ -403,106 +403,18 @@ def get_guild(guild_id):
             }
         })
 
-@app.route('/api/guild/<guild_id>/channels')
-@login_required
-def get_guild_channels(guild_id):
-    """Get channels for a guild"""
-    try:
-        # Get the current session
-        session = get_session()
-        if not session:
-            logger.warning("No active session found")
-            return []
-        
-        # Get the access token from the session
-        token = session.get('access_token')
-        if not token:
-            logger.warning("No access token found in session")
-            return []
-        
-        # Make the API request
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
-        
-        response = requests.get(
-            f'https://discord.com/api/v10/guilds/{guild_id}/channels',
-            headers=headers
-        )
-        
-        if response.status_code == 401:
-            # Token might be expired, try to refresh it
-            try:
-                refresh_token = session.get('refresh_token')
-                if refresh_token:
-                    new_token = refresh_discord_token(refresh_token)
-                    if new_token:
-                        # Update session with new token
-                        session['access_token'] = new_token
-                        save_session(session)
-                        
-                        # Retry the request with new token
-                        headers['Authorization'] = f'Bearer {new_token}'
-                        response = requests.get(
-                            f'https://discord.com/api/v10/guilds/{guild_id}/channels',
-                            headers=headers
-                        )
-            except Exception as e:
-                logger.error(f"Error refreshing token: {e}")
-        
-        if response.status_code == 200:
-            channels = response.json()
-            # Filter for text channels only
-            text_channels = [channel for channel in channels if channel['type'] == 0]
-            return text_channels
-        else:
-            logger.warning(f"Failed to get channels from Discord API: {response.status_code}")
-            logger.warning(f"Response body: {response.text}")
-            return []
-            
-    except Exception as e:
-        logger.error(f"Error getting channels: {e}")
-        logger.error(traceback.format_exc())
-        return []
+def get_session():
+    """Get the current Flask session"""
+    return session
 
-def refresh_discord_token(refresh_token):
-    """Refresh the Discord OAuth token"""
-    try:
-        data = {
-            'client_id': os.getenv('DISCORD_CLIENT_ID'),
-            'client_secret': os.getenv('DISCORD_CLIENT_SECRET'),
-            'grant_type': 'refresh_token',
-            'refresh_token': refresh_token,
-            'redirect_uri': os.getenv('DISCORD_REDIRECT_URI')
-        }
-        
-        response = requests.post('https://discord.com/api/oauth2/token', data=data)
-        if response.status_code == 200:
-            return response.json().get('access_token')
-        else:
-            logger.error(f"Failed to refresh token: {response.status_code}")
-            logger.error(f"Response body: {response.text}")
-            return None
-    except Exception as e:
-        logger.error(f"Error refreshing token: {e}")
-        return None
-
-@app.route('/api/guild/<guild_id>/activity')
-@login_required
-def get_guild_activity(guild_id):
-    try:
-        # Get recent activity from settings
-        settings = get_guild_settings(guild_id)
-        activity = settings.get('activity', [])
-        return jsonify(activity)
-    except Exception as e:
-        print(f"Error getting activity: {e}")
-        return jsonify({'error': str(e)}), 500
+def save_session(session_data):
+    """Save data to Flask session"""
+    for key, value in session_data.items():
+        session[key] = value
 
 @app.route('/api/guild/<guild_id>/settings')
 @login_required
-def get_guild_settings(guild_id):
+def get_guild_settings_endpoint(guild_id):
     """Get settings for a guild"""
     try:
         # Get settings from our local storage
@@ -510,10 +422,10 @@ def get_guild_settings(guild_id):
         
         # Get detailed guild data from Discord API
         try:
-            session = get_session()
-            if session and 'access_token' in session:
+            current_session = get_session()
+            if current_session and 'access_token' in current_session:
                 headers = {
-                    'Authorization': f'Bearer {session["access_token"]}'
+                    'Authorization': f'Bearer {current_session["access_token"]}'
                 }
                 response = requests.get(f'{DISCORD_API_ENDPOINT}/guilds/{guild_id}', headers=headers)
                 if response.status_code == 200:
@@ -730,6 +642,103 @@ def get_bot_stats():
 def logout():
     session.clear()
     return redirect(url_for('index'))
+
+@app.route('/api/guild/<guild_id>/channels')
+@login_required
+def get_guild_channels(guild_id):
+    """Get channels for a guild"""
+    try:
+        # Get the current session
+        current_session = get_session()
+        if not current_session:
+            logger.warning("No active session found")
+            return []
+        
+        # Get the access token from the session
+        token = current_session.get('access_token')
+        if not token:
+            logger.warning("No access token found in session")
+            return []
+        
+        # Make the API request
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.get(
+            f'https://discord.com/api/v10/guilds/{guild_id}/channels',
+            headers=headers
+        )
+        
+        if response.status_code == 401:
+            # Token might be expired, try to refresh it
+            try:
+                refresh_token = current_session.get('refresh_token')
+                if refresh_token:
+                    new_token = refresh_discord_token(refresh_token)
+                    if new_token:
+                        # Update session with new token
+                        current_session['access_token'] = new_token
+                        save_session(current_session)
+                        
+                        # Retry the request with new token
+                        headers['Authorization'] = f'Bearer {new_token}'
+                        response = requests.get(
+                            f'https://discord.com/api/v10/guilds/{guild_id}/channels',
+                            headers=headers
+                        )
+            except Exception as e:
+                logger.error(f"Error refreshing token: {e}")
+        
+        if response.status_code == 200:
+            channels = response.json()
+            # Filter for text channels only
+            text_channels = [channel for channel in channels if channel['type'] == 0]
+            return text_channels
+        else:
+            logger.warning(f"Failed to get channels from Discord API: {response.status_code}")
+            logger.warning(f"Response body: {response.text}")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error getting channels: {e}")
+        logger.error(traceback.format_exc())
+        return []
+
+def refresh_discord_token(refresh_token):
+    """Refresh the Discord OAuth token"""
+    try:
+        data = {
+            'client_id': os.getenv('DISCORD_CLIENT_ID'),
+            'client_secret': os.getenv('DISCORD_CLIENT_SECRET'),
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token,
+            'redirect_uri': os.getenv('DISCORD_REDIRECT_URI')
+        }
+        
+        response = requests.post('https://discord.com/api/oauth2/token', data=data)
+        if response.status_code == 200:
+            return response.json().get('access_token')
+        else:
+            logger.error(f"Failed to refresh token: {response.status_code}")
+            logger.error(f"Response body: {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Error refreshing token: {e}")
+        return None
+
+@app.route('/api/guild/<guild_id>/activity')
+@login_required
+def get_guild_activity(guild_id):
+    try:
+        # Get recent activity from settings
+        settings = get_guild_settings(guild_id)
+        activity = settings.get('activity', [])
+        return jsonify(activity)
+    except Exception as e:
+        print(f"Error getting activity: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # Get port from environment variable or default to 5000
