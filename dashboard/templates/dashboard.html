@@ -2,11 +2,49 @@
 
 {% block title %}Dashboard - {{ guild_name }}{% endblock %}
 
+{% block head %}
+<style>
+.server-icon-container {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: #2f3136;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.server-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.server-icon-placeholder {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7b68ee, #9370db);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="dashboard-header">
     <h1>Dashboard</h1>
     <div class="server-info">
-        <img id="server-icon" src="{{ guild_icon_url }}" alt="{{ guild_name }}" class="server-icon">
+        <div class="server-icon" id="server-icon-container">
+            <img id="server-icon" src="{{ guild_icon_url }}" alt="{{ guild_name }}" class="server-icon" onerror="this.style.display='none'; createInitialsIcon('{{ guild_name }}');">
+            <div id="server-initials" class="server-icon-placeholder" style="display:none;"></div>
+        </div>
         <h2 id="server-name">{{ guild_name }}</h2>
     </div>
 </div>
@@ -92,8 +130,20 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+<!-- Font Awesome from public CDN -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <script>
+// Function to create initials icon as fallback
+function createInitialsIcon(serverName) {
+    const initialsElement = document.getElementById('server-initials');
+    if (initialsElement) {
+        // Get first letter of server name or use '?' if empty
+        const initial = serverName ? serverName.charAt(0).toUpperCase() : '?';
+        initialsElement.textContent = initial;
+        initialsElement.style.display = 'flex';
+    }
+}
+
 // Get parameters from server-side
 const guildId = "{{ guild_id }}";
 let serverSettings = {{ settings|tojson|safe }};
