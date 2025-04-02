@@ -5,10 +5,9 @@
 {% block content %}
 <div class="dashboard-header">
     <h1>Dashboard</h1>
-    <div class="server-selector">
-        <select id="server-select" class="server-select">
-            <option value="">Select a server</option>
-        </select>
+    <div class="server-info">
+        <img id="server-icon" src="" alt="Server Icon" class="server-icon">
+        <h2 id="server-name">Loading...</h2>
     </div>
 </div>
 
@@ -53,38 +52,46 @@
                 </form>
             </div>
 
-            <!-- Enabled Cogs -->
+            <!-- Enabled Features -->
             <div class="setting-card">
                 <h3>Enabled Features</h3>
                 <form id="cogs-form" class="setting-form">
                     <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="cog" value="moderation" checked>
+                        <label class="checkbox-container">
+                            <input type="checkbox" name="cog" value="moderation">
+                            <span class="checkmark"></span>
                             Moderation
                         </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="cog" value="utility" checked>
+                        <label class="checkbox-container">
+                            <input type="checkbox" name="cog" value="utility">
+                            <span class="checkmark"></span>
                             Utility
                         </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="cog" value="image" checked>
+                        <label class="checkbox-container">
+                            <input type="checkbox" name="cog" value="image">
+                            <span class="checkmark"></span>
                             Image Commands
                         </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" name="cog" value="security">
+                            <span class="checkmark"></span>
+                            Security
+                        </label>
                     </div>
-                    <button type="submit" class="btn btn-primary">Update</button>
+                    <button type="submit" class="btn btn-primary">Update Features</button>
                 </form>
             </div>
 
-            <!-- Security Log Channel -->
+            <!-- Log Channel -->
             <div class="setting-card">
-                <h3>Security Log Channel</h3>
+                <h3>Log Channel</h3>
                 <form id="log-channel-form" class="setting-form">
                     <div class="form-group">
-                        <select id="channel-select">
+                        <select id="channel-select" class="channel-select">
                             <option value="">Select a channel</option>
                         </select>
-                        <button type="submit" class="btn btn-primary">Update</button>
                     </div>
+                    <button type="submit" class="btn btn-primary">Update Channel</button>
                 </form>
             </div>
         </div>
@@ -102,40 +109,29 @@
 
 {% block scripts %}
 <script>
-    // Load user's servers
-    async function loadServers() {
-        try {
-            const response = await fetch('/api/guilds');
-            const guilds = await response.json();
-            
-            const select = document.getElementById('server-select');
-            select.innerHTML = '<option value="">Select a server</option>';
-            
-            guilds.forEach(guild => {
-                const option = document.createElement('option');
-                option.value = guild.id;
-                option.textContent = guild.name;
-                select.appendChild(option);
-            });
-        } catch (error) {
-            console.error('Error loading servers:', error);
-        }
-    }
-
     // Load server settings
     async function loadServerSettings(guildId) {
         try {
             const response = await fetch(`/api/guild/${guildId}`);
             const settings = await response.json();
             
+            // Update server info
+            document.getElementById('server-name').textContent = settings.name;
+            const iconUrl = settings.icon ? 
+                `https://cdn.discordapp.com/icons/${guildId}/${settings.icon}.png` : 
+                '/static/img/default-server.png';
+            document.getElementById('server-icon').src = iconUrl;
+            
             // Update prefix
             document.getElementById('prefix-input').value = settings.prefix || '?';
             
             // Update enabled cogs
-            settings.cogs.forEach(cog => {
-                const checkbox = document.querySelector(`input[name="cog"][value="${cog}"]`);
-                if (checkbox) checkbox.checked = true;
-            });
+            if (settings.cogs && Array.isArray(settings.cogs)) {
+                settings.cogs.forEach(cog => {
+                    const checkbox = document.querySelector(`input[name="cog"][value="${cog}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
             
             // Update log channel
             const channelSelect = document.getElementById('channel-select');
@@ -227,21 +223,22 @@
 
     // Event Listeners
     document.addEventListener('DOMContentLoaded', () => {
-        loadServers();
+        // Get guild_id from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const guildId = urlParams.get('guild_id');
         
-        // Server selection change
-        document.getElementById('server-select').addEventListener('change', (e) => {
-            if (e.target.value) {
-                loadServerSettings(e.target.value);
-                loadActivity(e.target.value);
-            }
-        });
+        if (guildId) {
+            loadServerSettings(guildId);
+            loadActivity(guildId);
+        } else {
+            window.location.href = '/select-server';
+        }
         
         // Form submissions
         document.getElementById('prefix-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const prefix = document.getElementById('prefix-input').value;
-            const guildId = document.getElementById('server-select').value;
+            const guildId = new URLSearchParams(window.location.search).get('guild_id');
             
             try {
                 await fetch(`/api/guild/${guildId}/prefix`, {
@@ -255,7 +252,40 @@
             }
         });
         
-        // Add similar event listeners for other forms
+        document.getElementById('cogs-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const guildId = new URLSearchParams(window.location.search).get('guild_id');
+            const cogs = Array.from(document.querySelectorAll('input[name="cog"]:checked'))
+                .map(checkbox => checkbox.value);
+            
+            try {
+                await fetch(`/api/guild/${guildId}/cogs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cogs })
+                });
+                showNotification('Features updated successfully!', 'success');
+            } catch (error) {
+                showNotification('Failed to update features', 'error');
+            }
+        });
+        
+        document.getElementById('log-channel-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const guildId = new URLSearchParams(window.location.search).get('guild_id');
+            const channelId = document.getElementById('channel-select').value;
+            
+            try {
+                await fetch(`/api/guild/${guildId}/log-channel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel_id: channelId })
+                });
+                showNotification('Log channel updated successfully!', 'success');
+            } catch (error) {
+                showNotification('Failed to update log channel', 'error');
+            }
+        });
     });
 
     // Show notification

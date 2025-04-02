@@ -1,18 +1,20 @@
 /* Base styles and CSS variables */
 :root {
     --primary: #BB90FC;
-    --primary-dark: #9B6FFC;
+    --primary-dark: #9B70DC;
     --primary-light: #D9B8FF;
-    --background: #0A0A0A;
+    --background: #1A1A1A;
     --surface: #141414;
     --surface-hover: #1A1A1A;
     --text: #FFFFFF;
-    --text-secondary: #A0A0A0;
-    --border: #2A2A2A;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --border: rgba(255, 255, 255, 0.1);
     --success: #4CAF50;
     --error: #F44336;
     --glass: rgba(20, 20, 20, 0.8);
     --glass-hover: rgba(26, 26, 26, 0.8);
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --gradient: linear-gradient(135deg, var(--primary), var(--primary-dark));
 }
 
 /* Global styles */
@@ -361,24 +363,20 @@ main {
     right: 2rem;
     padding: 1rem 1.5rem;
     border-radius: 12px;
-    background: var(--glass);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--border);
-    color: var(--text);
-    animation: slideIn 0.3s ease-out;
-    z-index: 1000;
+    background: var(--gradient);
+    color: white;
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.3s;
 }
 
-@keyframes slideIn {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
+.notification.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.notification.error {
+    background: linear-gradient(135deg, #FF6B6B, #FF4757);
 }
 
 /* Dashboard Layout */
@@ -386,10 +384,9 @@ main {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
-    padding: 1rem;
-    background: var(--bg-secondary);
-    border-radius: 8px;
+    padding: 2rem;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
 }
 
 .server-selector {
@@ -415,28 +412,24 @@ main {
 /* Stats Grid */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
-    margin-bottom: 2rem;
+    padding: 2rem;
 }
 
 .stat-card {
-    background: var(--bg-secondary);
+    background: var(--card-bg);
+    border-radius: 12px;
     padding: 1.5rem;
-    border-radius: 8px;
     display: flex;
     align-items: center;
     gap: 1rem;
-    transition: transform 0.2s;
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
+    border: 1px solid var(--border);
 }
 
 .stat-card i {
     font-size: 2rem;
-    color: var(--accent-color);
+    color: var(--primary);
 }
 
 .stat-info {
@@ -446,84 +439,129 @@ main {
 
 .stat-value {
     font-size: 1.5rem;
-    font-weight: bold;
-    color: var(--text-primary);
+    font-weight: 600;
+    color: var(--primary);
 }
 
 .stat-label {
-    font-size: 0.9rem;
     color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 /* Settings Section */
 .settings-section {
-    background: var(--bg-secondary);
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 2rem;
+    padding: 2rem;
 }
 
 .settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-top: 1rem;
+    gap: 2rem;
+    margin-top: 2rem;
 }
 
 .setting-card {
-    background: var(--bg-primary);
-    padding: 1rem;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
 }
 
 .setting-card h3 {
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-}
-
-.setting-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    margin: 0 0 1.5rem 0;
+    color: var(--primary);
+    font-size: 1.2rem;
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 1rem;
 }
 
-.form-group input[type="text"],
-.form-group select {
-    padding: 0.5rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
+input[type="text"],
+.channel-select {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: var(--text);
+    font-size: 1rem;
 }
 
-.checkbox-label {
+.btn-primary {
+    background: var(--gradient);
+    border: none;
+    border-radius: 6px;
+    padding: 0.75rem 1.5rem;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+}
+
+/* Checkbox styling */
+.checkbox-container {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     cursor: pointer;
+    user-select: none;
 }
 
-.checkbox-label input[type="checkbox"] {
-    width: 1rem;
-    height: 1rem;
+.checkbox-container input {
+    display: none;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    display: inline-block;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.checkbox-container input:checked + .checkmark {
+    background: var(--gradient);
+    border-color: transparent;
+}
+
+.checkbox-container input:checked + .checkmark::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 2px;
+    width: 4px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
 }
 
 /* Activity Section */
 .activity-section {
-    background: var(--bg-secondary);
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
     padding: 1.5rem;
-    border-radius: 8px;
+}
+
+.activity-section h2 {
+    margin: 0 0 1.5rem;
+    font-size: 1.5rem;
+    color: var(--text);
 }
 
 .activity-list {
-    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .activity-item {
@@ -531,36 +569,39 @@ main {
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: var(--bg-primary);
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-    border: 1px solid var(--border-color);
+    background: var(--surface);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.activity-item:hover {
+    background: var(--surface-hover);
 }
 
 .activity-icon {
-    width: 2rem;
-    height: 2rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--accent-color-transparent);
-    border-radius: 50%;
-    color: var(--accent-color);
+    color: var(--text);
 }
 
-.activity-details {
+.activity-content {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
 }
 
-.activity-text {
-    color: var(--text-primary);
+.activity-content h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text);
 }
 
-.activity-time {
-    font-size: 0.8rem;
+.activity-content p {
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
     color: var(--text-secondary);
 }
 
@@ -642,7 +683,7 @@ main {
     height: 64px;
     border-radius: 50%;
     overflow: hidden;
-    background: var(--surface);
+    background: var(--gradient);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -867,32 +908,20 @@ main {
     right: 2rem;
     padding: 1rem 1.5rem;
     border-radius: 8px;
-    background: var(--glass);
-    border: 1px solid var(--border);
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    animation: slideIn 0.3s ease;
+    background: var(--gradient);
+    color: white;
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.3s;
 }
 
-.notification.success {
-    border-left: 4px solid var(--success);
+.notification.show {
+    transform: translateY(0);
+    opacity: 1;
 }
 
 .notification.error {
-    border-left: 4px solid var(--error);
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
+    background: linear-gradient(135deg, #FF6B6B, #FF4757);
 }
 
 /* Loading State */
